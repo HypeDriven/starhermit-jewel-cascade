@@ -1,0 +1,501 @@
+<!doctype html>
+<html lang="en" dir="ltr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <meta name="theme-color" content="#241a3a">
+  <meta name="description" content="Jewel Cascade — a deterministic match-3 puzzle in a jewel workshop suspended in warm twilight.">
+  <title>Jewel Cascade</title>
+  <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+  <noscript>
+    <div class="noscript-msg">
+      <h1>Jewel Cascade</h1>
+      <p>Jewel Cascade needs JavaScript to run. Enable JavaScript and reload to play.</p>
+    </div>
+  </noscript>
+
+  <div id="app">
+    <!-- Three.js render target. Never the only UI: #ui-root carries every control. -->
+    <canvas id="game-canvas" aria-hidden="true"></canvas>
+
+    <div id="ui-root">
+      <header id="app-header">
+        <a class="brand" href="#" id="brand-home">Jewel&nbsp;Cascade</a>
+        <nav id="app-nav" aria-label="Main">
+          <button type="button" class="nav-btn" data-nav="boards">Boards</button>
+          <button type="button" class="nav-btn" data-nav="achievements">Achievements</button>
+          <button type="button" class="nav-btn" data-nav="help">Help</button>
+          <button type="button" class="nav-btn" data-nav="settings">Settings</button>
+        </nav>
+      </header>
+
+      <main id="screens">
+        <!-- ======================= BOOT ======================= -->
+        <section class="screen" data-screen="boot" aria-labelledby="boot-h">
+          <div class="panel boot-panel">
+            <h1 id="boot-h">Jewel Cascade</h1>
+            <p class="tagline">A jewel workshop, suspended in warm twilight.</p>
+            <div class="boot-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="boot-bar">
+              <div class="boot-bar-fill" id="boot-fill"></div>
+            </div>
+            <p id="boot-status" class="dim">Lighting the lamps…</p>
+          </div>
+        </section>
+
+        <!-- ======================= TITLE ======================= -->
+        <section class="screen" data-screen="title" aria-labelledby="title-h" hidden>
+          <div class="title-wrap">
+            <h1 id="title-h" class="game-logo">Jewel Cascade</h1>
+            <p class="tagline">Swap jewels, chase cascades, finish the goals.</p>
+            <button type="button" id="btn-play" class="btn btn-primary btn-huge">Play</button>
+            <div class="title-chips" aria-label="Quick links">
+              <button type="button" id="chip-daily" class="chip">
+                <span class="chip-title">Daily challenge</span>
+                <span class="chip-sub" id="chip-daily-sub">Loading…</span>
+              </button>
+              <button type="button" id="chip-journey" class="chip">
+                <span class="chip-title">Journey</span>
+                <span class="chip-sub" id="chip-journey-sub">—</span>
+              </button>
+              <button type="button" id="chip-profile" class="chip">
+                <span class="chip-title">Profile</span>
+                <span class="chip-sub" id="chip-profile-sub">—</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= MODE SELECT ======================= -->
+        <section class="screen" data-screen="mode-select" aria-labelledby="modes-h" hidden>
+          <div class="panel-wide">
+            <h2 id="modes-h">Choose a mode</h2>
+            <ul class="mode-grid" id="mode-grid">
+              <li>
+                <button type="button" class="mode-card" data-mode="learn">
+                  <span class="mode-name">Learn</span>
+                  <span class="mode-desc">Short hands-on lessons — one rule at a time.</span>
+                  <span class="badge badge-casual">Casual</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" class="mode-card" data-mode="journey">
+                  <span class="mode-name">Journey</span>
+                  <span class="mode-desc">40 authored stages with growing mechanics.</span>
+                  <span class="badge badge-casual">Casual</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" class="mode-card" data-mode="daily">
+                  <span class="mode-name">Daily</span>
+                  <span class="mode-desc">One shared seed per UTC day. Same board for everyone.</span>
+                  <span class="badge badge-ranked">Ranked</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" class="mode-card" data-mode="practice">
+                  <span class="mode-name">Practice</span>
+                  <span class="mode-desc">Your difficulty, your seed, undo allowed. Unrated.</span>
+                  <span class="badge badge-casual">Casual</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" class="mode-card" data-mode="challenge">
+                  <span class="mode-name">Challenge</span>
+                  <span class="mode-desc">Tight move limits, timers and altered layouts.</span>
+                  <span class="badge badge-ranked">Ranked</span>
+                </button>
+              </li>
+              <li>
+                <button type="button" class="mode-card" data-mode="score">
+                  <span class="mode-name">Score chase</span>
+                  <span class="mode-desc">Chase the board on a validated shareable seed.</span>
+                  <span class="badge badge-ranked">Ranked</span>
+                </button>
+              </li>
+            </ul>
+            <div class="row-end">
+              <button type="button" class="btn" data-goto="title">Back</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= JOURNEY MAP ======================= -->
+        <section class="screen" data-screen="journey" aria-labelledby="journey-h" hidden>
+          <div class="panel-wide">
+            <h2 id="journey-h">Journey</h2>
+            <p class="dim" id="journey-progress-line">—</p>
+            <ol id="journey-grid" class="journey-grid" aria-label="Journey stages"></ol>
+            <div class="row-end">
+              <button type="button" class="btn" data-goto="mode-select">Back</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= SETUP ======================= -->
+        <section class="screen" data-screen="setup" aria-labelledby="setup-h" hidden>
+          <div class="panel-wide">
+            <h2 id="setup-h">Setup</h2>
+            <div id="setup-picker" class="setup-picker"></div>
+            <div id="setup-summary" class="setup-summary" hidden>
+              <h3 id="setup-name">—</h3>
+              <p id="setup-desc" class="dim">—</p>
+              <dl class="facts" id="setup-facts">
+                <div><dt>Rules</dt><dd id="setup-rules">—</dd></div>
+                <div><dt>Expected duration</dt><dd id="setup-duration">—</dd></div>
+                <div><dt>Players</dt><dd id="setup-players">1</dd></div>
+                <div><dt>Assists</dt><dd id="setup-assists">—</dd></div>
+                <div><dt>Ranked?</dt><dd id="setup-ranked">—</dd></div>
+              </dl>
+              <h4>Goals</h4>
+              <ul id="setup-goals" class="goal-list"></ul>
+            </div>
+            <div class="row-end">
+              <button type="button" class="btn" id="setup-back">Back</button>
+              <button type="button" class="btn btn-primary" id="setup-start" disabled>Start</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= GAME / HUD ======================= -->
+        <section class="screen" data-screen="game" aria-labelledby="hud-objective-h" hidden>
+          <div class="game-layout">
+            <header class="hud-status" id="hud-status-bar">
+              <span class="hud-score"><span class="hud-label">Score</span> <strong id="hud-score">0</strong></span>
+              <span class="hud-moves"><span class="hud-label">Moves</span> <strong id="hud-moves">—</strong></span>
+              <span class="hud-timer" id="hud-timer-wrap" hidden><span class="hud-label">Time</span> <strong id="hud-timer">—</strong></span>
+              <span class="hud-state" id="hud-state" role="status">Get ready</span>
+            </header>
+
+            <aside class="rail rail-objective" id="rail-objective" aria-labelledby="hud-objective-h">
+              <h2 id="hud-objective-h">Objective</h2>
+              <p id="hud-round-name" class="dim">—</p>
+              <ul id="hud-goals" class="goal-list"></ul>
+              <p class="hud-hint-line" id="hud-assists-line"></p>
+            </aside>
+
+            <div class="playfield" id="playfield" aria-hidden="true"></div>
+
+            <aside class="rail rail-actions" id="rail-actions" aria-label="Round actions">
+              <h2 class="visually-hidden">Actions</h2>
+              <button type="button" class="btn" id="btn-hint">Hint <kbd>H</kbd></button>
+              <button type="button" class="btn" id="btn-undo">Undo <kbd>U</kbd></button>
+              <button type="button" class="btn" id="btn-skip" hidden>Skip <kbd>S</kbd></button>
+              <button type="button" class="btn" id="btn-camera">Camera <kbd>C</kbd></button>
+              <button type="button" class="btn" id="btn-mirror-toggle" aria-expanded="false">Text board</button>
+              <button type="button" class="btn" id="btn-pause">Pause <kbd>Esc</kbd></button>
+            </aside>
+
+            <div class="thumb-tray" id="thumb-tray" aria-label="Round actions">
+              <button type="button" class="btn" id="tray-hint">Hint</button>
+              <button type="button" class="btn" id="tray-undo">Undo</button>
+              <button type="button" class="btn" id="tray-mirror" aria-expanded="false">Board</button>
+              <button type="button" class="btn" id="tray-pause">Pause</button>
+            </div>
+
+            <button type="button" class="drawer-tab drawer-tab-left" id="tab-objective" aria-expanded="false" aria-controls="rail-objective">Objective</button>
+            <button type="button" class="drawer-tab drawer-tab-right" id="tab-actions" aria-expanded="false" aria-controls="rail-actions">Actions</button>
+          </div>
+
+          <div id="tutorial-banner" class="tutorial-banner" hidden role="status">
+            <p id="tutorial-text"></p>
+            <div class="tutorial-meta">
+              <span id="tutorial-step-count"></span>
+              <button type="button" class="btn btn-small" id="btn-lesson-end">End lesson</button>
+            </div>
+          </div>
+
+          <div id="ready-overlay" class="ready-overlay" hidden aria-hidden="true">
+            <span id="ready-text">Ready…</span>
+          </div>
+
+          <div id="mirror-panel" class="mirror-panel" hidden aria-labelledby="mirror-h">
+            <div class="mirror-head">
+              <h2 id="mirror-h">Text board</h2>
+              <button type="button" class="btn btn-small" id="btn-mirror-close">Close</button>
+            </div>
+            <p id="mirror-summary" class="dim"></p>
+            <div id="mirror-board" class="mirror-board"></div>
+            <p class="dim mirror-help">Click a jewel, then an adjacent jewel, to swap. Keyboard: arrows move the cursor, Enter selects.</p>
+          </div>
+
+          <div id="webgl-fallback" class="webgl-fallback" hidden role="note">
+            <h2>3D view unavailable</h2>
+            <p>WebGL could not start on this device, so the workshop scene is hidden.
+               Your progress and settings are safe — you can play the full game on the text board below.</p>
+          </div>
+        </section>
+
+        <!-- ======================= PAUSE (overlay) ======================= -->
+        <section class="screen overlay" data-screen="pause" aria-labelledby="pause-h" hidden role="dialog" aria-modal="true">
+          <div class="panel overlay-panel">
+            <h2 id="pause-h">Paused</h2>
+            <div class="stack">
+              <button type="button" class="btn btn-primary" id="btn-resume">Resume</button>
+            </div>
+            <div class="stack">
+              <button type="button" class="btn" id="btn-pause-settings">Settings</button>
+              <button type="button" class="btn" id="btn-pause-help">Help</button>
+            </div>
+            <div class="stack">
+              <button type="button" class="btn" id="btn-pause-restart">Restart round</button>
+              <button type="button" class="btn btn-danger" id="btn-pause-leave">Leave to menu</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= RESULTS (overlay) ======================= -->
+        <section class="screen overlay" data-screen="results" aria-labelledby="res-h" hidden role="dialog" aria-modal="true">
+          <div class="panel overlay-panel results-panel">
+            <h2 id="res-h">Results</h2>
+            <p class="res-stars" id="res-stars" aria-label="Stars earned"></p>
+            <p class="res-score-line">Score <strong id="res-score">0</strong> <span id="res-ranked" class="badge badge-ranked" hidden>Ranked</span></p>
+
+            <h3>Score breakdown</h3>
+            <table class="breakdown" id="res-breakdown">
+              <caption class="visually-hidden">Score by component</caption>
+              <thead><tr><th scope="col">Component</th><th scope="col">Points</th></tr></thead>
+              <tbody id="res-breakdown-body"></tbody>
+              <tfoot><tr><th scope="row">Total</th><td id="res-total">0</td></tr></tfoot>
+            </table>
+
+            <h3>Goals</h3>
+            <ul id="res-goals" class="goal-list"></ul>
+
+            <div id="res-ach-wrap" hidden>
+              <h3>Achievements unlocked</h3>
+              <ul id="res-achievements" class="ach-inline"></ul>
+            </div>
+
+            <div id="res-mastery-wrap">
+              <h3>Mastery</h3>
+              <div class="xp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="res-mastery-bar">
+                <div class="xp-fill" id="res-mastery-fill"></div>
+              </div>
+              <p id="res-mastery-text" class="dim"></p>
+              <ul id="res-unlocks" class="ach-inline"></ul>
+            </div>
+
+            <div id="res-compare" class="res-compare dim">
+              Leaderboard comparison appears here when boards are available.
+            </div>
+
+            <div class="row-wrap">
+              <button type="button" class="btn" id="res-retry">Retry</button>
+              <button type="button" class="btn" id="res-replay">Replay</button>
+              <button type="button" class="btn btn-primary" id="res-next">Next</button>
+              <button type="button" class="btn" id="res-menu">Mode select</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= SETTINGS (overlay) ======================= -->
+        <section class="screen overlay" data-screen="settings" aria-labelledby="set-h" hidden role="dialog" aria-modal="true">
+          <div class="panel overlay-panel settings-panel">
+            <h2 id="set-h">Settings</h2>
+
+            <details open class="set-group">
+              <summary>Audio</summary>
+              <div class="set-grid">
+                <label for="set-master">Master volume</label>
+                <input type="range" id="set-master" min="0" max="100" step="1">
+                <label for="set-music">Music</label>
+                <input type="range" id="set-music" min="0" max="100" step="1">
+                <label for="set-effects">Effects</label>
+                <input type="range" id="set-effects" min="0" max="100" step="1">
+                <label for="set-ambience">Ambience</label>
+                <input type="range" id="set-ambience" min="0" max="100" step="1">
+                <label for="set-voice">Voice</label>
+                <input type="range" id="set-voice" min="0" max="100" step="1">
+                <label for="set-muted">Mute all</label>
+                <input type="checkbox" id="set-muted">
+              </div>
+            </details>
+
+            <details class="set-group">
+              <summary>Graphics</summary>
+              <div class="set-grid">
+                <label for="set-tier">Quality tier</label>
+                <select id="set-tier">
+                  <option value="auto">Auto</option>
+                  <option value="low">Low</option>
+                  <option value="medium">Medium</option>
+                  <option value="high">High</option>
+                </select>
+                <label for="set-render-scale">Render scale</label>
+                <input type="range" id="set-render-scale" min="50" max="100" step="5">
+              </div>
+            </details>
+
+            <details class="set-group">
+              <summary>Display &amp; accessibility</summary>
+              <div class="set-grid">
+                <label for="set-palette">Color palette</label>
+                <select id="set-palette">
+                  <option value="default">Default</option>
+                  <option value="deuter">Deuteranopia-safe</option>
+                  <option value="protan">Protanopia-safe</option>
+                  <option value="tritan">Tritanopia-safe</option>
+                  <option value="contrast">High contrast</option>
+                </select>
+                <label for="set-text-size">Text size</label>
+                <select id="set-text-size">
+                  <option value="normal">Normal</option>
+                  <option value="large">Large</option>
+                  <option value="xl">Extra large</option>
+                </select>
+                <label for="set-high-contrast">High contrast UI</label>
+                <input type="checkbox" id="set-high-contrast">
+                <label for="set-reduced-motion">Reduced motion</label>
+                <input type="checkbox" id="set-reduced-motion">
+                <label for="set-left-handed">Left-handed layout</label>
+                <input type="checkbox" id="set-left-handed">
+                <label for="set-timing-assist">Timing assistance</label>
+                <input type="checkbox" id="set-timing-assist">
+                <label for="set-haptics">Haptics</label>
+                <input type="checkbox" id="set-haptics">
+                <label for="set-captions">Captions for audio cues</label>
+                <input type="checkbox" id="set-captions">
+                <label for="set-hold-drag">Hold to drag jewels</label>
+                <input type="checkbox" id="set-hold-drag">
+              </div>
+              <button type="button" class="btn btn-small" id="btn-replay-tutorials">Replay tutorials (reset progress)</button>
+            </details>
+
+            <details class="set-group">
+              <summary>Camera</summary>
+              <div class="set-grid">
+                <label for="set-camera">Camera preset</label>
+                <select id="set-camera">
+                  <option value="default">Default</option>
+                  <option value="low">Low (near tabletop)</option>
+                  <option value="high">High (top-down)</option>
+                </select>
+              </div>
+            </details>
+
+            <details class="set-group">
+              <summary>Controls</summary>
+              <h3 class="set-sub">Keyboard</h3>
+              <ul id="remap-keyboard" class="remap-list"></ul>
+              <h3 class="set-sub">Gamepad</h3>
+              <ul id="remap-gamepad" class="remap-list"></ul>
+              <p class="dim">Choose “Rebind”, then press the new key or button. Escape cancels.</p>
+              <button type="button" class="btn btn-small" id="btn-reset-binds">Reset bindings</button>
+            </details>
+
+            <details class="set-group">
+              <summary>Profile &amp; privacy</summary>
+              <div class="set-grid">
+                <label for="set-display-name">Display name</label>
+                <input type="text" id="set-display-name" maxlength="24" autocomplete="nickname">
+                <label for="set-telemetry">Anonymous usage stats</label>
+                <input type="checkbox" id="set-telemetry">
+              </div>
+            </details>
+
+            <details class="set-group danger-zone">
+              <summary>Danger zone</summary>
+              <p class="dim">Erase every local setting, progress record and snapshot for this game.</p>
+              <button type="button" class="btn btn-danger" id="btn-wipe">Reset all data</button>
+            </details>
+
+            <div class="row-end">
+              <button type="button" class="btn btn-primary" id="btn-settings-close">Done</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= HELP ======================= -->
+        <section class="screen" data-screen="help" aria-labelledby="help-h" hidden>
+          <div class="panel-wide">
+            <h2 id="help-h">How to play</h2>
+            <div id="help-cards" class="help-grid"></div>
+            <div class="row-end">
+              <button type="button" class="btn" id="btn-help-back">Back</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= ACHIEVEMENTS ======================= -->
+        <section class="screen" data-screen="achievements" aria-labelledby="ach-h" hidden>
+          <div class="panel-wide">
+            <h2 id="ach-h">Achievements</h2>
+            <p class="dim" id="ach-summary">—</p>
+            <ul id="ach-list" class="ach-list"></ul>
+            <div class="row-end">
+              <button type="button" class="btn" data-goto="title">Back</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= BOARDS ======================= -->
+        <section class="screen" data-screen="boards" aria-labelledby="boards-h" hidden>
+          <div class="panel-wide">
+            <h2 id="boards-h">Leaderboards</h2>
+            <div role="tablist" aria-label="Boards" class="tabs">
+              <button type="button" role="tab" id="tab-global" aria-selected="true" data-board="global">Global</button>
+              <button type="button" role="tab" id="tab-friends" aria-selected="false" data-board="friends">Friends</button>
+              <button type="button" role="tab" id="tab-daily" aria-selected="false" data-board="daily">Daily</button>
+            </div>
+            <div id="boards-list" role="tabpanel" aria-live="polite"></div>
+            <div class="row-end">
+              <button type="button" class="btn" data-goto="title">Back</button>
+            </div>
+          </div>
+        </section>
+
+        <!-- ======================= PROFILE ======================= -->
+        <section class="screen" data-screen="profile" aria-labelledby="prof-h" hidden>
+          <div class="panel-wide">
+            <h2 id="prof-h">Profile</h2>
+            <div class="profile-head">
+              <span class="avatar" id="prof-avatar" aria-hidden="true">G</span>
+              <div>
+                <p class="profile-name" id="prof-name">Guest</p>
+                <p class="dim" id="prof-title-line">apprentice</p>
+              </div>
+            </div>
+
+            <h3>Mastery</h3>
+            <div class="xp-bar" role="progressbar" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="prof-mastery-bar">
+              <div class="xp-fill" id="prof-mastery-fill"></div>
+            </div>
+            <p class="dim" id="prof-mastery-text">—</p>
+
+            <h3>Career</h3>
+            <dl class="facts" id="prof-stats"></dl>
+
+            <h3>Cosmetics</h3>
+            <div class="set-grid">
+              <label for="cos-theme">Theme</label>
+              <select id="cos-theme"></select>
+              <label for="cos-trail">Trail</label>
+              <select id="cos-trail"></select>
+              <label for="cos-frame">Frame</label>
+              <select id="cos-frame"></select>
+              <label for="cos-title">Title</label>
+              <select id="cos-title"></select>
+            </div>
+            <p class="dim">Cosmetics change looks only — never rules, timing, or information.</p>
+
+            <div class="row-end">
+              <button type="button" class="btn" data-goto="title">Back</button>
+            </div>
+          </div>
+        </section>
+      </main>
+
+      <div id="toast-region" class="toast-region" aria-hidden="true"></div>
+      <div id="modal-root"></div>
+    </div>
+
+    <p id="sr-live" class="visually-hidden" aria-live="polite" role="status"></p>
+    <p id="sr-alert" class="visually-hidden" aria-live="assertive" role="alert"></p>
+  </div>
+
+  <script type="module" src="js/main.js"></script>
+</body>
+</html>

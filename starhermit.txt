@@ -1,0 +1,3 @@
+name=Jewel Cascade
+launch=index.html
+server=server.js
