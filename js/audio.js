@@ -1,10 +1,13 @@
 /**
  * audio.js — Jewel Cascade audio engine.
  *
- * Fully synthesized WebAudio (no audio files). Everything is silent until
- * unlock() is called from a user gesture; before that every public method is
- * a no-op. Buses: master ← {music, effects, ambience, voice}; per-bus gains
- * come from settings.audio, master carries the mute.
+ * Recorded one-shots from sfx/*.opus (see sfx/manifest.md) back the named
+ * game and UI sounds; they are fetched/decoded lazily after unlock and fall
+ * back to the synthesized WebAudio voices until ready or when unavailable.
+ * Everything is silent until unlock() is called from a user gesture; before
+ * that every public method is a no-op. Buses: master ← {music, effects,
+ * ambience, voice}; per-bus gains come from settings.audio, master carries
+ * the mute.
  *
  * Determinism: all cosmetic pitch/variant choices draw from seeded Rng
  * streams (fnv1a keys), never Math.random, so replays sound identical.
@@ -37,6 +40,36 @@ const DEFAULT_AMBIENCE = 'hearth';
 
 /** Major pentatonic semitone offsets used by the generative pluck stem. */
 const PENTA = [0, 2, 4, 7, 9, 12, 14, 16];
+
+/** Recorded one-shots live under sfx/ (see sfx/manifest.md). */
+const SFX_BASE = 'sfx/';
+
+/** UI sound name → recorded file (sfx/<name>.opus). */
+const UI_SFX = {
+  open: 'ui-modal-open',
+  close: 'ui-modal-close',
+  confirm: 'ui-confirm',
+  back: 'ui-back',
+  click: 'ui-click',
+  hover: 'ui-hover',
+  toggle: 'ui-toggle',
+  tab: 'ui-tab-switch',
+  scroll: 'ui-scroll-tick',
+  toast: 'ui-toast',
+  success: 'ui-success',
+  pause: 'ui-pause',
+  resume: 'ui-resume',
+  saved: 'ui-settings-saved',
+  select: 'gem-select',
+  hint: 'hint-reveal',
+  undo: 'undo',
+  star: 'star-reveal',
+  record: 'new-record',
+  warn: 'ui-timer-warning',
+  tick: 'ui-countdown-tick',
+  win: 'level-complete',
+  lose: 'level-fail',
+};
 
 const PAD_GAIN = 0.05;
 const SCHED_LOOKAHEAD_S = 1.2; // how far ahead the music sequencer schedules
@@ -130,6 +163,9 @@ export class AudioEngine {
 
     this._rngFx = new Rng(fnv1a('jc-audio-fx'));
     this._suspended = false;
+
+    this._sfxBuffers = new Map(); // name → AudioBuffer | null (null = unloadable)
+    this._sfxLoading = new Set();
   }
 
   /* ---------------- lifecycle ---------------- */
@@ -289,26 +325,81 @@ export class AudioEngine {
     };
   }
 
+  /* ---------------- recorded one-shots (sfx/*.opus) ---------------- */
+
+  /**
+   * Play a recorded one-shot through the effects bus. Files are fetched and
+   * decoded lazily on first use. Returns true only when a decoded buffer was
+   * actually scheduled; otherwise kicks off the load and returns false so the
+   * caller can fall back to the synthesized sound. Never throws: a missing
+   * file or a blocked context simply yields the synth fallback (or silence).
+   */
+  _playFile(name) {
+    if (!this.ctx || !this.buses) return false;
+    const buf = this._sfxBuffers.get(name);
+    if (buf === null) return false; // known unloadable
+    if (buf) {
+      if (!this._audible()) return false;
+      try {
+        const src = this.ctx.createBufferSource();
+        src.buffer = buf;
+        src.connect(this.buses.effects);
+        src.start();
+        src.onended = () => {
+          try {
+            src.disconnect();
+          } catch {
+            /* noop */
+          }
+        };
+        return true;
+      } catch {
+        return false;
+      }
+    }
+    if (!this._sfxLoading.has(name)) {
+      this._sfxLoading.add(name);
+      fetch(SFX_BASE + name + '.opus')
+        .then((r) => {
+          if (!r.ok) throw new Error('http ' + r.status);
+          return r.arrayBuffer();
+        })
+        .then((ab) => this.ctx.decodeAudioData(ab))
+        .then((decoded) => {
+          if (this.ctx) this._sfxBuffers.set(name, decoded);
+        })
+        .catch(() => this._sfxBuffers.set(name, null))
+        .finally(() => this._sfxLoading.delete(name));
+    }
+    return false;
+  }
+
   /* ---------------- named game sounds ---------------- */
 
   _soundSwap() {
+    if (this._playFile('gem-swap')) return;
     this._tone({ freq: 660, dur: 0.045, gain: 0.1, filter: 2400 });
     this._tone({ freq: 520, dur: 0.05, gain: 0.09, filter: 2200, at: 0.055 });
   }
 
   _soundReject() {
-    this._tone({ freq: 130, freqEnd: 105, dur: 0.18, gain: 0.16, filter: 700 });
-    this._tone({ freq: 138, freqEnd: 110, dur: 0.18, gain: 0.1, filter: 700 });
+    if (!this._playFile('ui-error')) {
+      this._tone({ freq: 130, freqEnd: 105, dur: 0.18, gain: 0.16, filter: 700 });
+      this._tone({ freq: 138, freqEnd: 110, dur: 0.18, gain: 0.1, filter: 700 });
+    }
     this._caption('[low buzz]');
     this.vibrate(20);
   }
 
   _soundMatch(cascade) {
     const c = Math.max(1, cascade || 1);
-    const base = 523.25 * Math.pow(1.09, Math.min(c - 1, 8)); // pitch rises with cascade
-    const steps = [0, 4, 7];
-    for (let i = 0; i < steps.length; i++) {
-      this._tone({ freq: semitone(base, steps[i]), dur: 0.16, gain: 0.14, filter: 4200, at: i * 0.055 });
+    const file = c >= 3 ? 'combo-tier-3' : c === 2 ? 'combo-tier-2' : 'match-chime';
+    if (!this._playFile(file)) {
+      const base = 523.25 * Math.pow(1.09, Math.min(c - 1, 8)); // pitch rises with cascade
+      const steps = [0, 4, 7];
+      for (let i = 0; i < steps.length; i++) {
+        this._tone({ freq: semitone(base, steps[i]), dur: 0.16, gain: 0.14, filter: 4200, at: i * 0.055 });
+      }
     }
     this._caption(c > 1 ? '[chime rising x' + c + ']' : '[chime]');
     this.vibrate(15);
@@ -327,14 +418,21 @@ export class AudioEngine {
 
   _soundBlast(kind) {
     const big = kind === SPECIAL_BLOOM || kind === SPECIAL_PRISM;
-    this._noise({ dur: big ? 0.4 : 0.22, gain: big ? 0.3 : 0.2, freq: big ? 900 : 1400, freqEnd: 300, q: 0.8 });
-    this._tone({ freq: big ? 65 : 80, freqEnd: 40, dur: big ? 0.5 : 0.32, gain: big ? 0.3 : 0.2, filter: 300 });
+    const file = kind === SPECIAL_BLOOM ? 'bloom-burst' : kind === SPECIAL_PRISM ? 'prism-burst' : 'ray-fire';
+    if (!this._playFile(file)) {
+      this._noise({ dur: big ? 0.4 : 0.22, gain: big ? 0.3 : 0.2, freq: big ? 900 : 1400, freqEnd: 300, q: 0.8 });
+      this._tone({ freq: big ? 65 : 80, freqEnd: 40, dur: big ? 0.5 : 0.32, gain: big ? 0.3 : 0.2, filter: 300 });
+    }
     this._caption(big ? '[big blast]' : '[blast]');
     this.vibrate(big ? [20, 30, 20] : 15);
     if (big) this._bumpIntensity(0.2);
   }
 
   _soundCrack() {
+    if (this._playFile('ice-crack')) {
+      this._caption('[ice crack]');
+      return;
+    }
     for (let i = 0; i < 3; i++) {
       this._noise({ dur: 0.03, gain: 0.08, type: 'highpass', freq: 3200, q: 1.5, at: i * 0.03 });
     }
@@ -342,6 +440,10 @@ export class AudioEngine {
   }
 
   _soundKnock(broke) {
+    if (broke && this._playFile('crate-break')) {
+      this._caption('[crate breaks]');
+      return;
+    }
     this._tone({ freq: broke ? 150 : 190, freqEnd: 90, dur: 0.1, gain: 0.18, filter: 900 });
     this._noise({ dur: 0.05, gain: 0.1, freq: 800, q: 2 });
     if (broke) this._tone({ freq: 120, freqEnd: 70, dur: 0.14, gain: 0.16, filter: 800, at: 0.07 });
@@ -363,24 +465,34 @@ export class AudioEngine {
   }
 
   _soundShuffle() {
+    if (this._playFile('board-shuffle')) {
+      this._caption('[swirl]');
+      return;
+    }
     this._noise({ dur: 0.6, gain: 0.14, freq: 400, freqEnd: 2800, q: 4 });
     this._noise({ dur: 0.5, gain: 0.1, freq: 2400, freqEnd: 350, q: 4, at: 0.18 });
     this._caption('[swirl]');
   }
 
   _soundGoal() {
+    if (this._playFile('goal-complete')) {
+      this._caption('[warm bell]');
+      return;
+    }
     this._tone({ freq: 880, dur: 0.9, gain: 0.16, filter: 4000 });
     this._tone({ freq: 1318.5, dur: 0.7, gain: 0.07, filter: 5000, at: 0.01 });
     this._caption('[warm bell]');
   }
 
   _soundWin() {
-    // Short original 4-note motif: E5 – G5 – C6 – E6.
-    const motif = [659.25, 783.99, 1046.5, 1318.5];
-    const times = [0, 0.14, 0.28, 0.46];
-    for (let i = 0; i < motif.length; i++) {
-      this._tone({ freq: motif[i], dur: i === 3 ? 0.55 : 0.16, gain: 0.16, filter: 5000, at: times[i] });
-      this._tone({ freq: motif[i] * 2, dur: i === 3 ? 0.4 : 0.1, gain: 0.05, filter: 6000, at: times[i] });
+    if (!this._playFile('level-complete')) {
+      // Short original 4-note motif: E5 – G5 – C6 – E6.
+      const motif = [659.25, 783.99, 1046.5, 1318.5];
+      const times = [0, 0.14, 0.28, 0.46];
+      for (let i = 0; i < motif.length; i++) {
+        this._tone({ freq: motif[i], dur: i === 3 ? 0.55 : 0.16, gain: 0.16, filter: 5000, at: times[i] });
+        this._tone({ freq: motif[i] * 2, dur: i === 3 ? 0.4 : 0.1, gain: 0.05, filter: 6000, at: times[i] });
+      }
     }
     this._caption('[win fanfare]');
     this.vibrate([30, 40, 30]);
@@ -388,6 +500,10 @@ export class AudioEngine {
   }
 
   _soundLose() {
+    if (this._playFile('level-fail')) {
+      this._caption('[soft descending tone]');
+      return;
+    }
     const seq = [392, 329.63, 261.63];
     for (let i = 0; i < seq.length; i++) {
       this._tone({ freq: seq[i], dur: 0.35, gain: 0.1, filter: 2400, at: i * 0.22 });
@@ -403,6 +519,9 @@ export class AudioEngine {
    */
   handleRulesEvents(events, state) {
     if (!this.ready) return;
+    // One chain-reaction one-shot per batch that cascades (cascade.opus);
+    // per-match tier chimes below still mark the combo level.
+    if (events.some((e) => e.t === 'match' && (e.cascade || 1) >= 2)) this._playFile('cascade');
     for (const e of events) {
       switch (e.t) {
         case 'swap':
@@ -457,9 +576,22 @@ export class AudioEngine {
 
   /* ---------------- UI sounds ---------------- */
 
-  /** name: 'open' | 'close' | 'confirm' | 'back' | 'error' | 'tick' */
+  /**
+   * name: 'open' | 'close' | 'confirm' | 'back' | 'error' | 'tick' | 'click' |
+   * 'hover' | 'toggle' | 'tab' | 'scroll' | 'toast' | 'success' | 'pause' |
+   * 'resume' | 'saved' | 'select' | 'hint' | 'undo' | 'star' | 'record' |
+   * 'warn' | 'win' | 'lose'
+   * Prefers the recorded one-shot from sfx/ (UI_SFX map); synthesized tones
+   * remain as fallback until the file is decoded or if it fails to load.
+   */
   uiSound(name) {
     if (!this._audible()) return;
+    if (name === 'error') {
+      this._soundReject();
+      return;
+    }
+    const file = UI_SFX[name];
+    if (file && this._playFile(file)) return;
     switch (name) {
       case 'open':
         this._tone({ freq: 440, freqEnd: 660, dur: 0.09, gain: 0.08, filter: 3000 });
@@ -473,9 +605,6 @@ export class AudioEngine {
         break;
       case 'back':
         this._tone({ freq: 392, dur: 0.08, gain: 0.08, filter: 2600 });
-        break;
-      case 'error':
-        this._soundReject();
         break;
       case 'tick':
         this._tone({ freq: 1180, dur: 0.035, gain: 0.05, filter: 4200 });
@@ -498,7 +627,7 @@ export class AudioEngine {
     const sec = Math.ceil(leftMs / 1000);
     if (sec !== this._lastTimerSecond) {
       this._lastTimerSecond = sec;
-      this.uiSound('tick');
+      this.uiSound('warn');
       if (sec <= 3) this._caption('[time warning]');
     }
   }
@@ -724,5 +853,6 @@ export class AudioEngine {
     this.buses = null;
     this.pool = null;
     this.musicLayers = null;
+    this._sfxBuffers.clear();
   }
 }

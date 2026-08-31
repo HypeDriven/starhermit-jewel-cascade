@@ -122,6 +122,7 @@ async function boot() {
   if (scene) {
     scene.onSwap = (ax, ay, bx, by) => session.trySwap(ax, ay, bx, by);
     scene.onSettled = () => session.settled();
+    scene.onSelect = () => audio.uiSound('select');
   }
   session.on('round', ({ resumed }) => {
     if (scene) scene.buildBoard(session.state);

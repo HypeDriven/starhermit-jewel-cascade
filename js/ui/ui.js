@@ -161,16 +161,36 @@ export function initUI(deps) {
     }, 30);
   }
 
-  function toast(msg, kind) {
+  function toast(msg, kind, silent) {
     const region = $('toast-region');
     const t = el('div', 'toast' + (kind ? ' toast-' + kind : ''), msg);
     region.appendChild(t);
     while (region.children.length > 3) region.removeChild(region.firstChild);
+    if (!silent) audio.uiSound('toast');
     setTimeout(() => {
       t.classList.add('toast-out');
       setTimeout(() => t.remove(), 400);
     }, 2600);
   }
+
+  /* ============ generic control feedback (hover tick / secondary click) ============ */
+
+  let lastHoverAt = 0;
+  document.addEventListener('pointerover', (e) => {
+    const ctrl = e.target && e.target.closest ? e.target.closest('button, select, input, a[href]') : null;
+    if (!ctrl || ctrl.disabled) return;
+    const now = performance.now();
+    if (now - lastHoverAt < 90) return;
+    lastHoverAt = now;
+    audio.uiSound('hover');
+  });
+  // Primary/danger buttons and nav controls carry their own sounds
+  // (confirm/open/back/tab); plain secondary buttons get the glass click.
+  document.addEventListener('click', (e) => {
+    const btn = e.target && e.target.closest ? e.target.closest('button.btn') : null;
+    if (!btn || btn.disabled || btn.classList.contains('btn-primary') || btn.hasAttribute('data-goto')) return;
+    audio.uiSound('click');
+  });
 
   /* ============ screen manager ============ */
 
@@ -263,6 +283,7 @@ export function initUI(deps) {
       const done = (value) => {
         document.removeEventListener('keydown', onKey, true);
         wrap.remove();
+        audio.uiSound('close');
         resolve(value);
       };
       for (const a of actions) {
@@ -282,6 +303,7 @@ export function initUI(deps) {
       root.appendChild(wrap);
       const firstBtn = row.querySelector('.btn-primary') || row.querySelector('button');
       if (firstBtn) firstBtn.focus();
+      audio.uiSound('open');
     });
   }
 
@@ -410,6 +432,7 @@ export function initUI(deps) {
 
   for (const btn of document.querySelectorAll('[data-goto]')) {
     btn.addEventListener('click', () => {
+      audio.uiSound('back');
       const to = btn.dataset.goto;
       if (to === 'title') {
         leaveToTitle();
@@ -739,7 +762,10 @@ export function initUI(deps) {
         startLesson();
         break;
       case 'active':
-        if (reason === 'resume') closeOverlay('pause');
+        if (reason === 'resume') {
+          closeOverlay('pause');
+          audio.uiSound('resume');
+        }
         $('hud-state').textContent = 'Your move';
         break;
       case 'resolving':
@@ -748,6 +774,7 @@ export function initUI(deps) {
       case 'paused':
         $('hud-state').textContent = 'Paused';
         openOverlay('pause');
+        audio.uiSound('pause');
         break;
       case 'results':
         closeOverlay('pause');
@@ -858,12 +885,14 @@ export function initUI(deps) {
   });
 
   session.on('hint', () => {
-    toast('Hint: watch the two highlighted jewels.', null);
+    audio.uiSound('hint');
+    toast('Hint: watch the two highlighted jewels.', null, true);
     announce('Hint shown on the board.', false);
   });
 
   session.on('undo', () => {
-    toast('Undone.', null);
+    audio.uiSound('undo');
+    toast('Undone.', null, true);
     mirrorRender();
   });
 
@@ -938,6 +967,7 @@ export function initUI(deps) {
     tab.addEventListener('click', () => {
       const open = rail.classList.toggle('open');
       tab.setAttribute('aria-expanded', String(open));
+      audio.uiSound('tab');
       if (open) rail.querySelector('button, h2').focus({ preventScroll: true });
       updateInsets();
     });
@@ -1068,6 +1098,9 @@ export function initUI(deps) {
     $('res-h').textContent = REASON_HEADLINES[r.reason] || 'Round over';
     $('res-stars').textContent = r.stars > 0 ? '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : '☆☆☆';
     $('res-stars').setAttribute('aria-label', r.stars + ' of 3 stars');
+    for (let s = 0; s < r.stars; s++) {
+      setTimeout(() => audio.uiSound('star'), 400 + s * 350);
+    }
     $('res-score').textContent = fmtInt(r.score);
     $('res-ranked').hidden = !r.ranked;
 
@@ -1102,6 +1135,7 @@ export function initUI(deps) {
     const newAch = (r.progression && r.progression.newAchievements) || [];
     if (newAch.length) {
       achWrap.hidden = false;
+      audio.uiSound('success');
       const ul = $('res-achievements');
       ul.innerHTML = '';
       for (const key of newAch) {
@@ -1163,6 +1197,7 @@ export function initUI(deps) {
     const best = mine.reduce((m, e) => Math.max(m, e.score), 0);
     const isBest = r.score >= best && r.score > 0;
     let text = isBest && r.score > 0 ? 'New personal best on this board!' : 'Personal best on this board: ' + fmtInt(best) + '.';
+    if (isBest && r.score > 0) audio.uiSound('record');
     cmp.textContent = text;
     if (r.ranked && platform.online) {
       platform
@@ -1640,6 +1675,7 @@ export function initUI(deps) {
       set(Number($(id).value) / 100);
       storage.saveSettings(settings);
       audio.applyVolumes();
+      audio.uiSound('scroll');
     });
   }
   bindRange('set-master', null, (v) => (settings.audio.master = v));
@@ -1656,6 +1692,15 @@ export function initUI(deps) {
   function settingsChanged(key) {
     storage.saveSettings(settings);
     analytics.track('settings_change', { key });
+    audio.uiSound('saved');
+  }
+
+  // Switch-click feedback for every checkbox toggle in the settings panel.
+  const settingsPanel = sectionOf('settings');
+  if (settingsPanel) {
+    settingsPanel.addEventListener('change', (e) => {
+      if (e.target && e.target.type === 'checkbox') audio.uiSound('toggle');
+    });
   }
 
   $('set-tier').addEventListener('change', () => {
@@ -1888,6 +1933,7 @@ export function initUI(deps) {
     tab.addEventListener('click', () => {
       boardTab = tab.dataset.board;
       for (const t of document.querySelectorAll('[data-board]')) t.setAttribute('aria-selected', String(t === tab));
+      audio.uiSound('tab');
       refreshBoards();
     });
   }

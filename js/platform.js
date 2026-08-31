@@ -24,20 +24,34 @@ function nowMs() {
   return Date.now();
 }
 
-/** Random opaque id (not a credential) for anonymous local-server identity. */
-function guestId() {
+const GUEST_KEY = 'jewelcascade.guest';
+const GUEST_PROOF_KEY = 'jewelcascade.guest-proof';
+
+function randomGuestId() {
+  const bytes = new Uint8Array(9);
+  (globalThis.crypto || {}).getRandomValues(bytes);
+  return 'g-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
+}
+
+let ephemeralGuest = null; // per-session fallback when localStorage is unavailable
+
+/**
+ * Random opaque id (not a credential) for anonymous local-server identity,
+ * plus the server-minted HMAC proof that binds it (GET /api/v1/identity).
+ * Without storage the id is a per-session random value — never a shared
+ * constant, so storage-less players cannot collide on one cloud save.
+ */
+function guestIdentity() {
   try {
-    const KEY = 'jewelcascade.guest';
-    let id = window.localStorage.getItem(KEY);
+    let id = window.localStorage.getItem(GUEST_KEY);
     if (!id) {
-      const bytes = new Uint8Array(9);
-      (globalThis.crypto || {}).getRandomValues(bytes);
-      id = 'g-' + Array.from(bytes, (b) => b.toString(16).padStart(2, '0')).join('');
-      window.localStorage.setItem(KEY, id);
+      id = randomGuestId();
+      window.localStorage.setItem(GUEST_KEY, id);
     }
-    return id;
+    return { id, proof: window.localStorage.getItem(GUEST_PROOF_KEY) || null };
   } catch {
-    return 'g-anonymous';
+    if (!ephemeralGuest) ephemeralGuest = { id: randomGuestId(), proof: null };
+    return ephemeralGuest;
   }
 }
 
@@ -89,6 +103,10 @@ export class Platform {
       this.online = false;
     }
 
+    // Guests need a server-minted proof bound to their id before the server
+    // will trust X-Guest-Id for cloud saves; mint one when we lack it.
+    if (this.online && !this.hosted) await this._ensureGuestProof();
+
     if (this.hosted) {
       try {
         const res = await this._request('GET', '/profile');
@@ -137,8 +155,34 @@ export class Platform {
   _headers() {
     const h = { 'Content-Type': 'application/json' };
     if (this.launchToken) h.Authorization = 'Bearer ' + this.launchToken;
-    else if (typeof window !== 'undefined') h['X-Guest-Id'] = guestId();
+    else if (typeof window !== 'undefined') {
+      const g = guestIdentity();
+      h['X-Guest-Id'] = g.id;
+      if (g.proof) h['X-Guest-Proof'] = g.proof;
+    }
     return h;
+  }
+
+  /**
+   * Fetch a server-issued guest id + HMAC proof and store them. Without the
+   * proof the server treats the guest id as untrusted (cloud saves fall back
+   * to a per-IP identity), so a stolen/guessed guest id alone is useless.
+   */
+  async _ensureGuestProof() {
+    if (guestIdentity().proof) return;
+    try {
+      const res = await this._rawFetch(this.apiBase + '/identity', { method: 'GET' }, PROBE_TIMEOUT_MS);
+      const j = res && res.ok ? await res.json() : null;
+      if (!j || typeof j.guestId !== 'string' || typeof j.proof !== 'string') return;
+      try {
+        window.localStorage.setItem(GUEST_KEY, j.guestId);
+        window.localStorage.setItem(GUEST_PROOF_KEY, j.proof);
+      } catch {
+        ephemeralGuest = { id: j.guestId, proof: j.proof }; // session-scoped
+      }
+    } catch {
+      /* offline or old server: proceed without a proof */
+    }
   }
 
   /**

@@ -91,12 +91,17 @@ function safeStorage() {
     return window.localStorage;
   } catch {
     // Private mode / file:// restrictions: fall back to an in-memory store so
-    // play continues and account state survives the session.
+    // play continues and account state survives the session. Exposes key() and
+    // length like real Storage so key iteration (e.g. wipeAll) works.
     const mem = new Map();
     return {
       getItem: (k) => (mem.has(k) ? mem.get(k) : null),
       setItem: (k, v) => mem.set(k, String(v)),
       removeItem: (k) => mem.delete(k),
+      key: (i) => [...mem.keys()][i] ?? null,
+      get length() {
+        return mem.size;
+      },
     };
   }
 }

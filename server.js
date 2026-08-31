@@ -77,7 +77,35 @@ async function writeJson(file, data) {
 
 /* ------------------------------------------------------------------ *
  *  Identity + rate limiting (all client input is untrusted)
- * ------------------------------------------------------------------ */
+ * ------------------------------------------------------------------ *
+ * Guest identities are server-issued capabilities: GET /api/v1/identity
+ * mints an id plus an HMAC proof, and every request must present both.
+ * Knowing someone's guest id alone no longer grants access to their save.
+ */
+
+let serverSecret = null; // loaded/minted in main() before listening
+
+async function loadServerSecret() {
+  const file = path.join(DATA_DIR, 'server-secret.json');
+  const existing = await readJson(file, null);
+  if (existing && typeof existing.secret === 'string' && existing.secret.length >= 32) {
+    serverSecret = existing.secret;
+    return;
+  }
+  serverSecret = crypto.randomBytes(32).toString('hex');
+  await writeJson(file, { secret: serverSecret }).catch(() => {});
+}
+
+function guestProof(guestId) {
+  if (!serverSecret) return null;
+  return crypto.createHmac('sha256', serverSecret).update(guestId).digest('hex').slice(0, 32);
+}
+
+function guestProofMatches(guestId, proof) {
+  const want = guestProof(guestId);
+  if (!want || typeof proof !== 'string' || proof.length !== want.length) return false;
+  return crypto.timingSafeEqual(Buffer.from(proof, 'utf8'), Buffer.from(want, 'utf8'));
+}
 
 function identityOf(req) {
   const auth = req.headers['authorization'];
@@ -86,7 +114,9 @@ function identityOf(req) {
     return 't-' + crypto.createHash('sha256').update(auth.slice(7)).digest('hex').slice(0, 24);
   }
   const guest = req.headers['x-guest-id'];
-  if (typeof guest === 'string' && /^g-[a-z0-9-]{4,40}$/.test(guest)) return guest;
+  if (typeof guest === 'string' && /^g-[a-z0-9-]{4,40}$/.test(guest) && guestProofMatches(guest, req.headers['x-guest-proof'])) {
+    return guest;
+  }
   return 'ip-' + fnv1a(req.socket.remoteAddress || 'unknown').toString(36);
 }
 
@@ -144,12 +174,32 @@ function canonicalConfigFor(contentId, claimedConfig) {
       (!cfg.crates || cfg.crates.length === 0) &&
       (!cfg.ice || cfg.ice.length === 0) &&
       !cfg.layout &&
+      !cfg.play &&
       typeof cfg.seed === 'string' &&
       cfg.seed.startsWith('chase-') &&
       cfg.seed.length <= 60 &&
       cfg.assists && cfg.assists.undo === false;
     if (!shapeOk) return { error: 'chase config does not match the fixed ruleset' };
-    return { config: cfg };
+    // Rebuild the authoritative config from validated fields only: play masks,
+    // ranked/time-limit overrides and any stray keys never reach the replay.
+    return {
+      config: {
+        contentId,
+        contentVersion: content.CONTENT_VERSION,
+        seed: cfg.seed,
+        width: SCORE_CHASE_SHAPE.width,
+        height: SCORE_CHASE_SHAPE.height,
+        colors: SCORE_CHASE_SHAPE.colors,
+        moves: SCORE_CHASE_SHAPE.moves,
+        goals: [{ type: 'score', n: SCORE_CHASE_SHAPE.target }],
+        layout: null,
+        crates: [],
+        ice: [],
+        assists: { undo: false, hints: cfg.assists.hints !== false },
+        ranked: true,
+        timeLimitMs: null,
+      },
+    };
   }
   return { error: 'mode not ranked' };
 }
@@ -199,8 +249,10 @@ function verifyReplay(config, replay, claimed) {
   if (state.score !== claimed.score) return { ok: false, reason: 'score mismatch', state };
   if (claimed.movesSpent !== state.movesSpent) return { ok: false, reason: 'move count mismatch', state };
   // Plausibility: elapsed time must cover a minimal human cadence per swap.
+  // The timing-assist exemption comes from the authoritative config, never
+  // from the untrusted submission envelope.
   const minMs = state.stats.swaps * 120;
-  if (claimed.elapsedMs < minMs && !(claimed.assists && claimed.assists.timingAssist)) {
+  if (claimed.elapsedMs < minMs && !(config.assists && config.assists.timingAssist)) {
     return { ok: false, reason: 'implausibly fast', state };
   }
   return { ok: true, state };
@@ -406,6 +458,7 @@ const MIME = {
   '.ico': 'image/x-icon',
   '.webmanifest': 'application/manifest+json',
   '.woff2': 'font/woff2',
+  '.opus': 'audio/ogg',
 };
 
 function sendJson(res, status, obj) {
@@ -440,6 +493,13 @@ async function handleApi(req, res, url) {
     if (!rateLimit(identity, 'time', 240)) return sendJson(res, 429, { error: 'rate limited', retryAfterMs: 1000 });
     const ms = Date.now();
     return sendJson(res, 200, { ms, iso: new Date(ms).toISOString() });
+  }
+
+  if (route === '/identity' && req.method === 'GET') {
+    if (!rateLimit(identity, 'identity', 30)) return sendJson(res, 429, { error: 'rate limited', retryAfterMs: 2000 });
+    // Mint an anonymous guest id plus the HMAC proof that binds it.
+    const guestId = 'g-' + crypto.randomBytes(9).toString('hex');
+    return sendJson(res, 200, { guestId, proof: guestProof(guestId) });
   }
 
   if (route === '/scores' && req.method === 'POST') {
@@ -522,7 +582,7 @@ function serveStatic(req, res, url) {
   let pathname = decodeURIComponent(url.pathname);
   if (pathname === '/') pathname = '/index.html';
   const filePath = path.normalize(path.join(ROOT, pathname));
-  if (!filePath.startsWith(ROOT)) {
+  if (filePath !== ROOT && !filePath.startsWith(ROOT + path.sep)) {
     res.writeHead(403);
     res.end('forbidden');
     return;
@@ -554,6 +614,7 @@ function serveStatic(req, res, url) {
 
 async function main() {
   await ensureDataDir();
+  await loadServerSecret();
   const server = http.createServer(async (req, res) => {
     try {
       const url = new URL(req.url, 'http://localhost');

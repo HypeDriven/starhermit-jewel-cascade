@@ -1602,6 +1602,7 @@ export class JewelScene {
   }
 
   _setSelected(idx) {
+    const changed = idx !== this.selected;
     this.selected = idx;
     if (idx < 0) {
       this.selRing.visible = false;
@@ -1611,6 +1612,13 @@ export class JewelScene {
     this.selRing.position.x = p.x;
     this.selRing.position.z = p.z;
     this.selRing.visible = true;
+    if (changed && typeof this.onSelect === 'function') {
+      try {
+        this.onSelect(idx);
+      } catch {
+        /* audio callback must never break input */
+      }
+    }
   }
 
   /* ================= keyboard cursor ================= */
