@@ -18,7 +18,7 @@ import { reviveContent } from './engine/content.js';
 import { JewelScene } from './render/scene.js';
 import { initUI } from './ui/ui.js';
 import { AudioEngine } from './audio.js';
-import { Platform } from './platform.js';
+import { Platform } from './platform.js?v=production-qa-1';
 import { Analytics } from './analytics.js';
 
 const errors = [];
