@@ -98,7 +98,10 @@ export class Platform {
     // under the local dev server. Absent API = static hosting = offline mode.
     try {
       const res = await this._rawFetch(this.apiBase + '/time', { method: 'GET' }, PROBE_TIMEOUT_MS);
-      this.online = !!res && res.ok;
+      const body = res && res.ok ? await res.clone().json().catch(() => null) : null;
+      // The platform host also owns /api/v1/time, but its response shape is
+      // not this game's server API. Treat only our {ms} contract as online.
+      this.online = !!body && typeof body.ms === 'number';
     } catch {
       this.online = false;
     }
