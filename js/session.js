@@ -160,7 +160,8 @@ export class GameSession {
     this._tickCarry = 0;
 
     this.emit('round', { content, config: this.config, resumed });
-    if (this.analytics) this.analytics.track('start', { mode: this.mode, id: content.id });
+    // Single owner of the funnel 'start' event; a resumed round is not a start.
+    if (this.analytics && !resumed) this.analytics.track('start', { mode: this.mode, id: content.id });
 
     if (content.tutorial && !resumed) {
       this.transition('tutorial', 'lesson-required');

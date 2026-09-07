@@ -124,9 +124,9 @@ async function boot() {
     scene.onSettled = () => session.settled();
     scene.onSelect = () => audio.uiSound('select');
   }
-  session.on('round', ({ resumed }) => {
+  session.on('round', () => {
     if (scene) scene.buildBoard(session.state);
-    if (!resumed) analytics.track('start', { mode: session.mode, id: session.content && session.content.id });
+    // The 'start' funnel event is emitted by the session (its single owner).
     platform.startActivity();
   });
   session.on('rules', ({ events, state, fast }) => {

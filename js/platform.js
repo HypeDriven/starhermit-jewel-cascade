@@ -293,6 +293,9 @@ export class Platform {
       durationBand: durationBand(r.elapsedMs || 0),
       replay: r.replay
         ? {
+            // roundId lets the server dedupe resubmissions of the same round
+            // and lets the client find its own entry (rank) on the board.
+            roundId: r.roundId,
             schema: r.replay.schema,
             contentId: r.replay.contentId,
             contentVersion: r.replay.contentVersion,

@@ -185,6 +185,28 @@ async function runPass(browser, vp) {
       }
     });
 
+    await step('keyboard-only swap on the text board', async () => {
+      // Regression guard: the in-game key handler must not swallow Enter/Space
+      // from the focused control, or the text mirror board (the accessible
+      // play path) becomes unusable without a pointer.
+      await page.click(BTN.mirror);
+      await page.waitForSelector('#mirror-panel:not([hidden])');
+      const before = await readGame();
+      const act = await page.evaluate(() => window.__jc.rules.legalActions(window.__jc.session.state)[0]);
+      const w = await page.evaluate(() => window.__jc.session.state.width);
+      if (!act) throw new Error('no legal swap available for the keyboard pass');
+      await page.focus(`[data-cell="${act.ay * w + act.ax}"]`);
+      await page.keyboard.press('Enter');
+      if (!(await page.evaluate(() => !!document.querySelector('.mirror-sel')))) {
+        throw new Error('Enter did not select the focused mirror cell');
+      }
+      await page.focus(`[data-cell="${act.by * w + act.bx}"]`);
+      await page.keyboard.press(' ');
+      await page.waitForFunction((m) => window.__jc.session.state.movesLeft < m, before.movesLeft, { timeout: 20000 });
+      await page.click('#btn-mirror-close');
+      await page.waitForSelector('#mirror-panel', { state: 'hidden' });
+    });
+
     await step('pause → settings → resume', async () => {
       await page.click(BTN.pause);
       await page.waitForSelector(screenVisible('pause'), { timeout: 5000 });

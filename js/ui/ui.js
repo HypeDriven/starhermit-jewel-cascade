@@ -986,10 +986,14 @@ export function initUI(deps) {
 
   function startLesson() {
     if (!lesson || !lesson.steps.length) return;
+    // Re-entering 'tutorial' after every guided move would otherwise re-announce
+    // and re-track the step the player is already on.
+    if (lesson.shownStep === lesson.i) return;
     showLessonStep();
   }
 
   function showLessonStep() {
+    lesson.shownStep = lesson.i;
     const s = lesson.steps[lesson.i];
     const banner = $('tutorial-banner');
     banner.hidden = false;
@@ -1112,8 +1116,9 @@ export function initUI(deps) {
       if (v <= 0) continue;
       anyRow = true;
       const tr = el('tr');
-      tr.appendChild(el('th', null, COMPONENT_LABELS[k]));
-      tr.scope = 'row';
+      const th = el('th', null, COMPONENT_LABELS[k]);
+      th.scope = 'row';
+      tr.appendChild(th);
       const td = el('td', null, fmtInt(v));
       tr.appendChild(td);
       tbody.appendChild(tr);
@@ -1502,6 +1507,16 @@ export function initUI(deps) {
     return a && (a.tagName === 'INPUT' || a.tagName === 'SELECT' || a.tagName === 'TEXTAREA');
   }
 
+  /**
+   * True when focus sits on a real control (HUD button, mirror-board cell,
+   * link). Confirm keys must reach it so keyboard users can activate it;
+   * stealing them would make the text mirror board unplayable by keyboard.
+   */
+  function isOnControl() {
+    const a = document.activeElement;
+    return !!(a && a !== document.body && a.matches && a.matches('button, a[href], [role="button"]'));
+  }
+
   function bindingFor(code) {
     for (const action of Object.keys(keyMap)) {
       if (keyMap[action] === code) return action;
@@ -1533,6 +1548,8 @@ export function initUI(deps) {
     }
     if (!inGame) return;
     if (!action) return;
+    // Enter/Space belong to the focused control (mirror cells, HUD buttons).
+    if ((action === 'confirm' || action === 'confirm2') && isOnControl()) return;
     e.preventDefault();
     runAction(action, e);
   });

@@ -337,9 +337,14 @@ async function handleSubmitScore(req, body, identity) {
   if (!verdict.ok) return { status: 422, json: { accepted: false, error: verdict.reason } };
 
   const boards = await loadBoards();
-  const roundId = typeof body.replay.roundId === 'string' ? body.replay.roundId : null;
+  const roundId = typeof body.replay.roundId === 'string' && body.replay.roundId.length > 0 && body.replay.roundId.length <= 64
+    ? body.replay.roundId
+    : null;
   // Idempotency: a resubmitted round returns its standing, never a duplicate.
-  const existing = boards.entries.find((e) => e.roundId === (roundId || identity + ':' + fnv1a(JSON.stringify(body.replay.commands.map((c) => c.id)))));
+  // Scoped to the submitting identity so a guessed round id cannot suppress
+  // another player's submission.
+  const entryId = roundId || identity + ':' + fnv1a(JSON.stringify(body.replay.commands.map((c) => c.id)));
+  const existing = boards.entries.find((e) => e.roundId === entryId && e.identity === identity);
   if (existing) {
     const sorted = boards.entries.filter((e) => e.contentId === existing.contentId).sort(compareEntries);
     return { status: 200, json: { accepted: true, dedup: true, rank: sorted.indexOf(existing) + 1 } };
@@ -347,7 +352,7 @@ async function handleSubmitScore(req, body, identity) {
 
   const name = sanitizeName(body.displayName) || 'guest';
   const entry = {
-    roundId: roundId || identity + ':' + fnv1a(JSON.stringify(body.replay.commands.map((c) => c.id))),
+    roundId: entryId,
     identity,
     name,
     contentId: body.contentId,
@@ -587,7 +592,7 @@ function serveStatic(req, res, url) {
     res.end('forbidden');
     return;
   }
-  if (filePath.startsWith(DATA_DIR)) {
+  if (filePath === DATA_DIR || filePath.startsWith(DATA_DIR + path.sep)) {
     res.writeHead(404);
     res.end('not found');
     return;

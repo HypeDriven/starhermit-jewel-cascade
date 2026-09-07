@@ -12,6 +12,31 @@ defects (1–5) are resolved in code; suspected items 3–4 are resolved; suspec
 deliberately left as-is. `npm test` 61/61 pass, `node --check` clean on all modules, and the browser
 e2e (`tests/e2e.mjs`, run via `npm run test:e2e`) now present and passing on desktop + mobile.
 
+**Follow-up 2026-09-07 (review pass):** five new items found and fixed; all previously recorded
+items still hold. Fixes, in order of severity:
+
+1. **The in-game key handler swallowed Enter/Space from the focused control** (`js/ui/ui.js`), so the
+   text mirror board — the pointer-free accessible play path — could not be operated by keyboard at
+   all (Enter never selected a cell, Space never committed a swap), and HUD buttons could not be
+   activated while the game screen was up. Confirm keys now pass through when focus is on a
+   `button`/`a[href]`/`[role=button]`. Reproduced and re-verified in headless Chrome; a regression
+   step (`keyboard-only swap on the text board`) was added to `tests/e2e.mjs`.
+2. **Ranked results never showed their server rank** — the client submitted a replay envelope with no
+   `roundId` (`js/platform.js`), so the server stored a derived id and the results screen's
+   `findIndex(e => e.roundId === r.roundId)` lookup could never match. The envelope now carries
+   `roundId`; the server bounds it (≤64 chars) and scopes idempotency lookups to the submitting
+   identity so a guessed id cannot suppress another player's entry (`server.js`).
+3. **Duplicate `start` funnel events** — both `js/main.js` and `js/session.js` tracked one per round.
+   The session is now the single owner and no longer counts a resumed round as a start.
+4. **Learn mode re-announced and re-tracked the current step** after every guided move, because
+   re-entering the `tutorial` state re-ran `startLesson()`. It is now a no-op for the step already
+   shown (`js/ui/ui.js`).
+5. **Minor:** results breakdown set `scope="row"` on the `<tr>` instead of the `<th>`; the
+   `data/` guard in `serveStatic` used a string prefix rather than a path boundary (`server.js`),
+   matching the fix already applied to the `ROOT` check.
+
+`LICENSE.md` (PolyForm Noncommercial 1.0.0) was missing and has been added.
+
 ## Test results
 
 | Check | Result |
