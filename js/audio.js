@@ -407,10 +407,18 @@ export class AudioEngine {
   }
 
   _soundCreate(kind) {
+    // Draw the seeded variant unconditionally so the fx stream advances the
+    // same way whether or not the recorded clip has finished loading.
+    const v = this._rngFx.int(3); // seeded variant: replays sound identical
+    // Recorded forging shimmer when available; the seeded sparkle gliss below
+    // stays as the fallback so the cue fires even without the file.
+    if (this._playFile('special-forge')) {
+      this._caption('[sparkle]');
+      return;
+    }
     // Sparkle gliss; variant per special kind.
     const roots = { [SPECIAL_RAY_H]: 780, [SPECIAL_RAY_V]: 880, [SPECIAL_BLOOM]: 660, [SPECIAL_PRISM]: 990 };
     const f0 = roots[kind] || 760;
-    const v = this._rngFx.int(3); // seeded variant: replays sound identical
     this._tone({ freq: f0, freqEnd: f0 * 2, dur: 0.28, gain: 0.12, filter: 6000, at: 0 });
     this._tone({ freq: f0 * 1.5, freqEnd: f0 * 3, dur: 0.22, gain: 0.08, filter: 7000, at: 0.05 + v * 0.02 });
     this._caption('[sparkle]');

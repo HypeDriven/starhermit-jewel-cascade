@@ -151,6 +151,7 @@ input[type="range"] { accent-color: var(--accent); min-height: var(--tap); }
   border-radius: 999px;
   border: 1px solid var(--panel-line);
 }
+.badge[hidden] { display: none; } /* .badge sets display, which beats the UA [hidden] rule */
 .badge-ranked { color: var(--gold); border-color: var(--gold); }
 .badge-casual { color: var(--muted); }
 
@@ -871,3 +872,36 @@ body.no-webgl #btn-mirror-toggle, body.no-webgl #tray-mirror { display: none; }
   .tutorial-banner { bottom: calc(0.4rem + var(--sab)); padding: 0.5rem 0.8rem; }
 }
 body.no-webgl #btn-camera { display: none; }
+
+/* ---------- generated key art (assets/) ---------- */
+/* Title backdrop. Decorative only: the layer sits behind .title-wrap and is
+   painted under a scrim so the logo and chips keep their contrast. If the
+   image fails to load the gradient scrim alone still reads as the normal
+   title background. */
+.screen[data-screen="title"] {
+  background-image:
+    linear-gradient(180deg, rgb(32 22 52 / 0.55) 0%, rgb(32 22 52 / 0.72) 55%, rgb(28 19 48 / 0.95) 100%),
+    image-set(url("../assets/title-keyart.webp") type("image/webp"));
+  background-size: cover, cover;
+  background-position: center 28%, center 28%;
+  background-repeat: no-repeat, no-repeat;
+}
+html.hc .screen[data-screen="title"] {
+  background-image: linear-gradient(180deg, rgb(16 10 32 / 0.94), rgb(16 10 32 / 0.98));
+}
+
+/* Results banner. Decorative illustration above the score breakdown; hidden
+   when it cannot be shown usefully (short viewports, high contrast). */
+.res-plate {
+  display: block;
+  width: 100%;
+  height: 8.5rem;
+  margin: -1.2rem -1.4rem 0.9rem;
+  width: calc(100% + 2.8rem);
+  border-radius: var(--radius) var(--radius) 0 0;
+  background: #1c1330 center 42% / cover no-repeat;
+  background-image: image-set(url("../assets/results-plate.webp") type("image/webp"));
+  box-shadow: inset 0 -40px 40px -24px rgb(28 19 48 / 0.95);
+}
+html.hc .res-plate { display: none; }
+@media (max-height: 620px) { .res-plate { display: none; } }

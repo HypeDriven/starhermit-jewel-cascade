@@ -1,0 +1,224 @@
+[
+  {
+    "name": "ui-click",
+    "seconds": 1,
+    "prompt": "Bright short glass button click, crystalline edge, dry, clean UI tick",
+    "event": "ui:click"
+  },
+  {
+    "name": "ui-hover",
+    "seconds": 1,
+    "prompt": "Very short soft glass tick, quiet, subtle hover blip",
+    "event": "ui:hover"
+  },
+  {
+    "name": "ui-confirm",
+    "seconds": 2,
+    "prompt": "Warm two-note rising crystalline confirmation chime, glassy, positive",
+    "event": "ui:confirm"
+  },
+  {
+    "name": "ui-back",
+    "seconds": 1,
+    "prompt": "Soft short descending glass tone, gentle back navigation sound",
+    "event": "ui:back"
+  },
+  {
+    "name": "ui-error",
+    "seconds": 1,
+    "prompt": "Dull muted low double buzz, negative denied UI sound, no reverb",
+    "event": "ui:error / rules:reject / rules:swap-back"
+  },
+  {
+    "name": "ui-success",
+    "seconds": 3,
+    "prompt": "Bright ascending three-note gem chime with sparkle tail, celebratory",
+    "event": "ui:success"
+  },
+  {
+    "name": "ui-modal-open",
+    "seconds": 1,
+    "prompt": "Soft airy short whoosh with a gentle glass chime, panel opening",
+    "event": "ui:open"
+  },
+  {
+    "name": "ui-modal-close",
+    "seconds": 1,
+    "prompt": "Soft airy descending whoosh with faint muted chime, panel closing",
+    "event": "ui:close"
+  },
+  {
+    "name": "ui-toggle",
+    "seconds": 1,
+    "prompt": "Small mechanical switch click with a light glass ping, settings toggle",
+    "event": "ui:toggle"
+  },
+  {
+    "name": "ui-tab-switch",
+    "seconds": 1,
+    "prompt": "Glass pane sliding with a quick crystalline snap, tab switch",
+    "event": "ui:tab"
+  },
+  {
+    "name": "ui-scroll-tick",
+    "seconds": 1,
+    "prompt": "Single tiny crystal bead tick on glass, very short list scroll tick",
+    "event": "ui:scroll"
+  },
+  {
+    "name": "ui-toast",
+    "seconds": 2,
+    "prompt": "Gentle small bell ding with a warm wooden knock, notification",
+    "event": "ui:toast"
+  },
+  {
+    "name": "ui-pause",
+    "seconds": 2,
+    "prompt": "Mellow suspended glass tone dampened into silence, pause",
+    "event": "ui:pause"
+  },
+  {
+    "name": "ui-resume",
+    "seconds": 1,
+    "prompt": "Bright rising two-note crystal chime, resume from pause",
+    "event": "ui:resume"
+  },
+  {
+    "name": "ui-countdown-tick",
+    "seconds": 1,
+    "prompt": "Precise metallic clock tick with a tiny glass ping, countdown",
+    "event": "ui:tick"
+  },
+  {
+    "name": "ui-timer-warning",
+    "seconds": 2,
+    "prompt": "Tense low pulse with a thin high overtone, urgent timer warning",
+    "event": "ui:warn"
+  },
+  {
+    "name": "ui-settings-saved",
+    "seconds": 2,
+    "prompt": "Soft double glass blip settling on a warm note, saved confirmation",
+    "event": "ui:saved"
+  },
+  {
+    "name": "gem-select",
+    "seconds": 1,
+    "prompt": "Light glassy gem pick-up tick with a faint ring, selection",
+    "event": "ui:select"
+  },
+  {
+    "name": "gem-swap",
+    "seconds": 1,
+    "prompt": "Two glass gems sliding past each other and clicking into place",
+    "event": "rules:swap"
+  },
+  {
+    "name": "match-chime",
+    "seconds": 2,
+    "prompt": "Three glass gems chiming together, harmonic sparkle, bright match",
+    "event": "rules:match (cascade 1)"
+  },
+  {
+    "name": "combo-tier-2",
+    "seconds": 2,
+    "prompt": "Bright stacked gem chime, one step higher, combo tier two",
+    "event": "rules:match (cascade 2)"
+  },
+  {
+    "name": "combo-tier-3",
+    "seconds": 2,
+    "prompt": "Wide shimmering high gem chime with sparkling tail, big combo",
+    "event": "rules:match (cascade 3+)"
+  },
+  {
+    "name": "cascade",
+    "seconds": 3,
+    "prompt": "Rapid tumbling glass gem chimes falling over each other, chain reaction",
+    "event": "rules:match (batch cascade)"
+  },
+  {
+    "name": "special-forge",
+    "seconds": 2,
+    "prompt": "Crystalline forging shimmer rising in pitch into a bright locked-in ping, magical gem creation, glassy sparkle",
+    "event": "rules:create"
+  },
+  {
+    "name": "ray-fire",
+    "seconds": 2,
+    "prompt": "Focused beam whoosh cutting across with a glass zing, laser sweep",
+    "event": "rules:blast (ray-h / ray-v)"
+  },
+  {
+    "name": "bloom-burst",
+    "seconds": 2,
+    "prompt": "Round low bloom explosion with a wide sparkling glass debris tail",
+    "event": "rules:blast (bloom)"
+  },
+  {
+    "name": "prism-burst",
+    "seconds": 3,
+    "prompt": "Huge prismatic shatter fanning out into ringing glass shards, spectral",
+    "event": "rules:blast (prism) / rules:prism-swap"
+  },
+  {
+    "name": "ice-crack",
+    "seconds": 1,
+    "prompt": "Sharp thin ice fracture with fine splinters, brittle crack",
+    "event": "rules:crack"
+  },
+  {
+    "name": "crate-break",
+    "seconds": 1,
+    "prompt": "Dry wooden crate splitting apart with a low thud, splintering wood",
+    "event": "rules:crate-break"
+  },
+  {
+    "name": "board-shuffle",
+    "seconds": 3,
+    "prompt": "Swirling wash of glass gems tumbling and resettling, magical reshuffle",
+    "event": "rules:shuffle"
+  },
+  {
+    "name": "goal-complete",
+    "seconds": 2,
+    "prompt": "Warm single bell with a long shimmering tail, objective complete",
+    "event": "rules:goal (done)"
+  },
+  {
+    "name": "level-complete",
+    "seconds": 5,
+    "prompt": "Triumphant ascending jewel fanfare with shimmer tail, level complete",
+    "event": "ui:win / rules:end (goals-complete)"
+  },
+  {
+    "name": "level-fail",
+    "seconds": 3,
+    "prompt": "Soft descending three-tone figure, gentle disappointed level fail",
+    "event": "ui:lose / rules:end (out-of-moves, time-expired, resigned)"
+  },
+  {
+    "name": "star-reveal",
+    "seconds": 1,
+    "prompt": "Single bright twinkle blooming open, star reveal sparkle",
+    "event": "ui:star"
+  },
+  {
+    "name": "new-record",
+    "seconds": 4,
+    "prompt": "Layered rising fanfare with a bell accent, new personal record",
+    "event": "ui:record"
+  },
+  {
+    "name": "hint-reveal",
+    "seconds": 2,
+    "prompt": "Airy upward sparkle, gentle pointing hint reveal chime",
+    "event": "ui:hint"
+  },
+  {
+    "name": "undo",
+    "seconds": 2,
+    "prompt": "Reversed glass swish settling backwards, undo rewind",
+    "event": "ui:undo"
+  }
+]

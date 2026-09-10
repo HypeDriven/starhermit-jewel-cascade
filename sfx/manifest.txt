@@ -1,0 +1,44 @@
+# Jewel Cascade — canonical SFX manifest.
+# Format: file | event id | description of the sound | usage context
+# Event ids are the identifiers used in js/audio.js: 'ui:<name>' is uiSound(<name>)
+# and 'rules:<type>' is the rules event type handled by handleRulesEvents().
+# All clips are 48 kHz mono Opus (96 kbps VBR, loudness-normalized), MOSS-SoundEffect v2.0.
+# Every clip has a synthesized WebAudio fallback so the cue still fires if the file is missing.
+
+ui-click.opus | ui:click | Bright glass button click with a crystalline edge | Primary button press on any screen (uiSound('click'), js/audio.js UI_SFX)
+ui-hover.opus | ui:hover | Very short soft glass tick, almost subliminal | Pointer hover / keyboard focus moving across interactive controls
+ui-confirm.opus | ui:confirm | Warm two-note crystalline chime rising | Confirming a selection, starting a level from the setup screen
+ui-back.opus | ui:back | Soft descending glass tone | Back navigation, leaving a screen towards the previous one
+ui-error.opus | ui:error / rules:reject / rules:swap-back | Dull muted double buzz, no brightness | Illegal swap (rejected command), swap-back after a no-match swap, denied action
+ui-success.opus | ui:success | Bright ascending three-note gem chime | Achievement earned, star awarded, positive milestone toast
+ui-modal-open.opus | ui:open | Soft airy whoosh with a gentle chime | Overlay/dialog opens (pause, settings, results)
+ui-modal-close.opus | ui:close | Soft airy descending whoosh with a faint muted chime | Overlay/dialog closes and focus returns to the opener
+ui-toggle.opus | ui:toggle | Small mechanical switch click with a light ping | Settings checkbox or select changing value
+ui-tab-switch.opus | ui:tab | Glass pane sliding with a quick crystalline snap | Switching leaderboard tabs and drawer tabs
+ui-scroll-tick.opus | ui:scroll | Single tiny crystal bead tick on glass | Per-step movement through a list (journey stages, board entries)
+ui-toast.opus | ui:toast | Gentle small bell ding with a warm wooden knock | Toast notification appears (achievement progress, cloud save synced)
+ui-pause.opus | ui:pause | Mellow suspended glass tone dampened into silence | Round paused, pause overlay opens
+ui-resume.opus | ui:resume | Bright rising two-note crystal chime | Resuming play from the pause overlay
+ui-countdown-tick.opus | ui:tick | Precise metallic clock tick with a tiny glass ping | Pre-round 3-2-1 countdown ticks before play begins
+ui-timer-warning.opus | ui:warn | Tense low pulse with a thin high overtone | Timed challenge: once per second while under ten seconds remain (timerUpdate)
+ui-settings-saved.opus | ui:saved | Soft double glass blip settling on a warm note | Settings written to storage / profile change committed
+gem-select.opus | ui:select | Light glassy pick-up tick with a faint ring | A jewel is selected on the board (scene.onSelect) or on the text mirror board
+gem-swap.opus | rules:swap | Two glass gems sliding and clicking into place | Accepted swap animation begins (rules 'swap' event)
+match-chime.opus | rules:match (cascade 1) | Three glass gems chiming together with harmonic sparkle | A match of three or more resolves on the first cascade step
+combo-tier-2.opus | rules:match (cascade 2) | Brighter stacked chime a step higher than the base match | Second cascade step in a chain reaction
+combo-tier-3.opus | rules:match (cascade 3+) | Highest, widest chime with a shimmering tail | Third and deeper cascade steps in a chain reaction
+cascade.opus | rules:match (batch cascade) | Rapid tumbling gem chimes falling over each other | Played once per resolution batch that reaches cascade two or deeper
+special-forge.opus | rules:create | Crystalline forging shimmer rising into a bright locked-in ping | A ray, bloom or prism jewel is forged by a match of four or more
+ray-fire.opus | rules:blast (ray-h / ray-v) | Focused beam whoosh cutting across with a glass zing | A ray jewel detonates and clears its row or column
+bloom-burst.opus | rules:blast (bloom) | Round low bloom with a wide sparkling debris tail | A bloom jewel detonates and clears the surrounding three by three
+prism-burst.opus | rules:blast (prism) / rules:prism-swap | Huge prismatic shatter fanning out into ringing shards | A prism fires, or a prism swap converts and detonates a whole colour
+ice-crack.opus | rules:crack | Sharp thin ice fracture with fine splinters | An ice layer over a jewel is broken by an adjacent match or blast
+crate-break.opus | rules:crate-break | Dry wooden crate splitting apart with a low thud | A crate reaches zero hit points and is destroyed
+board-shuffle.opus | rules:shuffle | Swirling wash of gems tumbling and resettling | The board deadlocks and is reshuffled at no move cost
+goal-complete.opus | rules:goal (done) | Warm single bell with a long shimmering tail | One of the round's goals reaches zero remaining
+level-complete.opus | ui:win / rules:end (goals-complete) | Triumphant ascending jewel fanfare with a shimmer tail | Every goal completed: the round is won and the results overlay opens
+level-fail.opus | ui:lose / rules:end (out-of-moves, time-expired, resigned) | Soft descending three-tone figure, disappointed but gentle | The round ends without completing the goals
+star-reveal.opus | ui:star | Single bright twinkle blooming open | Each star is revealed one at a time on the results screen
+new-record.opus | ui:record | Layered rising fanfare with a bell accent | A new personal best score is recorded for the content just played
+hint-reveal.opus | ui:hint | Airy upward sparkle pointing at something | The hint assist highlights a suggested swap for 2.6 seconds
+undo.opus | ui:undo | Reversed glass swish settling backwards | The undo assist rewinds the last swap in practice mode
