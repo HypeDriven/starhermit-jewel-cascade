@@ -162,6 +162,7 @@ async function boot() {
   session.on('results', (r) => {
     if (audio) audio.uiSound(r.won ? 'win' : 'lose');
     platform.endActivity();
+    if (platform.hosted && platform.queueCloudSave) platform.queueCloudSave(progress);
   });
 
   /* ---------------- ui ---------------- */
@@ -178,6 +179,9 @@ async function boot() {
     applyTheme,
     applyGraphics,
   });
+  platform.onSyncChange = () => {
+    if (ui && ui.syncChanged) ui.syncChanged();
+  };
 
   /* ---------------- clock, visibility, resize ---------------- */
   let lastTick = performance.now();
@@ -256,8 +260,14 @@ async function boot() {
       platform.presencePing({ status: 'playing', mode: session.mode });
     }
   }, 30000);
+  // Hosted: debounced mirror to the platform cloud slot (queueCloudSave).
+  // Dev server: immediate POST /save with conflict surfacing.
   function pushCloud() {
-    if (!platform.hosted || !platform.cloudSave) return;
+    if (platform.hosted) {
+      if (platform.queueCloudSave) platform.queueCloudSave(progress);
+      return;
+    }
+    if (!platform.cloudSave) return;
     progress._savedAt = new Date().toISOString();
     platform.cloudSave(progress).then((res) => {
       if (res && res.conflict && ui && ui.resolveCloudConflict) {
@@ -269,14 +279,30 @@ async function boot() {
   window.addEventListener('pagehide', () => {
     platform.endActivity();
     session.saveSnapshot();
-    pushCloud();
+    if (platform.hosted && platform.flushCloudSave) platform.flushCloudSave();
+    else pushCloud();
   });
   if (platform.hosted && platform.cloudLoad) {
+    // Remote-preferred load: a strictly newer cloud doc wins (local copy is
+    // backed up first); an equal-or-older cloud doc is left for this device
+    // to overwrite with the next queued save.
     platform.cloudLoad().then((remote) => {
       if (!remote || !remote.doc) return;
-      const localNewer = (progress._savedAt || '') >= (remote.doc._savedAt || '');
-      if (localNewer) return;
-      if (ui && ui.resolveCloudConflict) ui.resolveCloudConflict(remote.doc, progress);
+      const remoteAt = remote.doc._savedAt || remote.savedAt || '';
+      const localAt = progress._savedAt || '';
+      if (localAt >= remoteAt) {
+        platform.queueCloudSave(progress);
+        return;
+      }
+      try {
+        window.localStorage.setItem('jewelcascade.progress-backup', JSON.stringify({ at: new Date().toISOString(), doc: progress }));
+      } catch {
+        /* best effort */
+      }
+      for (const k of Object.keys(progress)) delete progress[k];
+      Object.assign(progress, remote.doc);
+      storage.saveProgress(progress);
+      if (ui && ui.cloudApplied) ui.cloudApplied();
     }).catch(() => {});
   }
 

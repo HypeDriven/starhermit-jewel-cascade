@@ -380,7 +380,28 @@ export function initUI(deps) {
     });
   };
 
+  ui.syncChanged = () => {
+    refreshTitle();
+    if (currentScreen === 'profile') refreshProfile();
+  };
+
+  ui.cloudApplied = () => {
+    refreshMetaScreens();
+    toast('Cloud save applied.', 'ok');
+  };
+
   /* ============ title / chips ============ */
+
+  // Hosted shows the platform nickname; offline/dev shows the local editable
+  // display name. Never a username.
+  function playerName() {
+    return platform.hosted && platform.profile && platform.profile.displayName ? platform.profile.displayName : settings.player.displayName || 'Guest';
+  }
+
+  const SYNC_LABELS = { offline: 'cloud: offline', saving: 'cloud: saving…', synced: 'cloud: synced', error: 'cloud: sync error' };
+  function syncLabel() {
+    return SYNC_LABELS[platform.syncState] || '';
+  }
 
   function refreshTitle() {
     const total = content.JOURNEY.length;
@@ -388,7 +409,7 @@ export function initUI(deps) {
     const nextStage = Math.min(progress.journeyUnlocked || 1, total);
     $('chip-journey-sub').textContent = 'Stage ' + nextStage + ' of ' + total + ' · ' + stars + '★';
     const level = masteryLevelForXp(progress.masteryXp || 0);
-    $('chip-profile-sub').textContent = (settings.player.displayName || 'Guest') + ' · mastery ' + level;
+    $('chip-profile-sub').textContent = playerName() + ' · mastery ' + level + (platform.hosted ? ' · ' + syncLabel() : '');
     refreshDailyChip();
   }
 
@@ -646,7 +667,7 @@ export function initUI(deps) {
     assists.push(c.assists.hints ? 'hints' : 'no hints');
     if (settings.access.timingAssist && c.timeLimitSec) assists.push('timing assist ×1.5');
     $('setup-assists').textContent = assists.join(', ');
-    $('setup-ranked').textContent = c.ranked ? (platform.online ? 'Ranked (replay-validated)' : 'Ranked (recorded locally)') : 'Casual';
+    $('setup-ranked').textContent = c.ranked ? (!platform.online ? 'Ranked (recorded locally)' : platform.hosted ? 'Ranked (personal bests)' : 'Ranked (replay-validated)') : 'Casual';
     const goals = $('setup-goals');
     goals.innerHTML = '';
     if (c.kind === 'lesson') {
@@ -1204,7 +1225,7 @@ export function initUI(deps) {
     let text = isBest && r.score > 0 ? 'New personal best on this board!' : 'Personal best on this board: ' + fmtInt(best) + '.';
     if (isBest && r.score > 0) audio.uiSound('record');
     cmp.textContent = text;
-    if (r.ranked && platform.online) {
+    if (r.ranked && platform.online && !platform.hosted) {
       platform
         .fetchBoards({ board: r.mode === 'daily' ? 'daily' : 'global', contentId: r.contentId, dayKey: r.mode === 'daily' ? r.contentId.slice(6) : undefined, limit: 50 })
         .then((res) => {
@@ -1224,7 +1245,7 @@ export function initUI(deps) {
         roundId: r.roundId,
         contentId: r.contentId,
         mode: r.mode,
-        name: settings.player.displayName || 'Guest',
+        name: playerName(),
         score: r.score,
         won: r.won,
         moves: r.movesSpent,
@@ -1671,7 +1692,9 @@ export function initUI(deps) {
     $('set-hold-drag').checked = !!settings.input.holdToDrag;
     $('set-captions').checked = !!settings.access.captions;
     $('set-camera').value = settings.camera.preset || 'default';
-    $('set-display-name').value = settings.player.displayName || 'Guest';
+    const nameInput = $('set-display-name');
+    nameInput.value = playerName();
+    nameInput.disabled = platform.hosted; // hosted name comes from the platform profile
     $('set-telemetry').checked = !!settings.privacy.telemetryConsent;
     buildRemapLists();
   }
@@ -2008,7 +2031,7 @@ export function initUI(deps) {
     const boards = storage.loadBoards();
     let entries = boards.entries.slice();
     if (board === 'daily') entries = entries.filter((e) => e.mode === 'daily');
-    else if (board === 'friends') entries = entries.filter((e) => e.name === (settings.player.displayName || 'Guest'));
+    else if (board === 'friends') entries = entries.filter((e) => e.name === playerName());
     entries = entries.sort((a, b) => b.score - a.score).slice(0, 15);
     if (!entries.length) return el('p', 'dim', 'No local results yet.');
     return renderBoardTable(entries, false, 'Local bests (casual)');
@@ -2036,10 +2059,18 @@ export function initUI(deps) {
   }
 
   function refreshProfile() {
-    const name = settings.player.displayName || 'Guest';
+    const name = playerName();
     $('prof-name').textContent = name;
     $('prof-avatar').textContent = name.slice(0, 1).toUpperCase();
     $('prof-title-line').textContent = cosmeticName('title', settings.cosmetics.title);
+    const syncEl = $('prof-sync');
+    if (platform.hosted) {
+      syncEl.hidden = false;
+      syncEl.textContent = syncLabel();
+    } else {
+      syncEl.hidden = true;
+      syncEl.textContent = '';
+    }
     const xp = progress.masteryXp || 0;
     const level = masteryLevelForXp(xp);
     const mp = masteryProgress(xp);

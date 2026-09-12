@@ -35,7 +35,7 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | `js/render/scene.js` | Three.js scene, board build, event-driven animation timeline, particles |
 | `js/ui/ui.js` | Screen manager, HUD, mirror board, settings, remapping, gamepad |
 | `js/audio.js` | Buses, recorded one-shots, synth fallbacks, adaptive music, captions |
-| `js/platform.js` | StarHermit adapter (`/api/v1`), identity, scores, cloud save |
+| `js/platform.js` | StarHermit adapter (`/api/v1`): launch token + refresh, hosted profile/cloud/leaderboards, dev-server surface |
 | `js/storage.js` | Checksummed, versioned `localStorage` documents |
 | `js/analytics.js` | Consent-gated funnel telemetry |
 | `server.js` | Authoritative script: replay verification, boards, saves, static serving |
@@ -505,21 +505,26 @@ Conventions per <https://wiki.starhermit.com/>. `starhermit.txt` declares `name`
 `owner`, `server=server.js`, `cover=coverart.png`. The client adapter is `js/platform.js`
 (`API_BASE = '/api/v1'`); the authoritative script is `server.js`.
 
-**Used.**
+**Hosted (platform host, `*.starhermit.com`).** The launch token arrives in the URL
+fragment `#game_token=<jwt>` (read once, stripped; query-param/injected fallbacks are
+local-dev only). Its payload provides `sub` and `game_scope` (the game key — never
+hard-coded). Every REST call carries `Authorization: Bearer`; the token is re-minted
+every 45 min via `POST /games/{slug}/launch-token` (retry ~60 s).
 
 | Feature | Route | Behaviour |
 |---|---|---|
-| Time sync | `GET /time` | Also the online probe; offset = `serverMs − (t0 + rtt/2)` |
-| Identity | `GET /identity` | Hosted: launch token → `Authorization: Bearer`. Guest: the server mints `g-…` plus an HMAC-SHA256 proof; the client sends `X-Guest-Id` + `X-Guest-Proof`. Unproven ids fall back to a per-IP identity |
-| Profile | `GET /profile` | Hosted only; supplies the leaderboard display name |
-| Sessions / activity | `POST /activity` | Round start and end, with a coarse duration band |
-| Presence | `POST /presence` | Every 30 s while playing (adapter floor 20 s) |
-| Leaderboards | `POST /scores`, `GET /boards` | Ranked modes only. Global / friends / daily boards |
-| Cloud save | `POST /save`, `GET /save` | Progress pushed every 60 s and on `pagehide`, with conflict detection |
-| Telemetry | `POST /telemetry` | Consent-gated funnel batches |
-| Friends | `GET /friends` | Read-only; the server currently returns an honest empty list |
+| Time sync | `GET /time` | Online probe (any healthy response = reachable) and round-trip-adjusted offset; the dev server's `{ms}` shape is the only one that enables the dev surface below |
+| Profile | `GET /users/{sub}/profile` | Nickname only (never `/me`, never usernames); fallback `"Player " + sub.slice(0,8)`; shown on the profile chip/screens |
+| Cloud save | `PUT/GET /me/cloud-saves/{slug}` | One slot, stored zip (`progress.json`) + base64; saves debounced 2 s and flushed on `pagehide`; remote wins when strictly newer; sync status on the profile chip/screen; `localStorage` stays the offline cache |
+| Leaderboards | `GET /games/{slug}`, `GET /leaderboards/{id}/entries` | Read-only; `friendsOnly=true` for the friends tab; user ids resolved to nicknames; no leaderboardId or the daily tab → local records only |
 
-**Score submission is verified, not trusted.** A submission carries a replay envelope
+**Dev server only (`node server.js`).** Replay-validated `POST /scores`, `GET /boards`,
+`POST/GET /save` (conflict surfacing), `GET /identity` (guest id + HMAC proof,
+`X-Guest-Id`/`X-Guest-Proof`), `GET /profile`, `POST /activity`, `POST /presence`,
+`POST /telemetry`, `GET /friends`. These are the game's own backend and are never
+called under the platform host, so hosted play makes no fabricated calls.
+
+**Score submission is verified, not trusted (dev server).** A submission carries a replay envelope
 `{schema, contentId, contentVersion, seed, config, commands, finalHash, roundId}`. The server
 rebuilds the *authoritative* config — dailies from `content.dailyContent(dayKey)`, challenges from
 `content.CHALLENGES`, and score chase only if the client config matches the fixed shape exactly —
@@ -529,10 +534,11 @@ Practice, Learn and Journey are not ranked and cannot be submitted. Idempotency 
 `(roundId, identity)`. Boards are capped at 5000 entries, trimmed to the top 2500, and public
 entries never expose identity or tie-break keys. Rate limits are per identity *and* per route.
 
-**Not used.** No platform achievements API (the five achievements are local only); no presence
+**Not used.** No platform achievements API (the five achievements are local only, part of the
+cloud-saved doc); clients can never submit scores to a platform leaderboard (script/elo-owned) —
+hosted ranked rounds are recorded as personal bests, kept locally and cloud-saved; no presence
 read; no realtime, matchmaking or multiplayer of any kind — the game is single-player with
-asynchronous comparison. `GET /api/v1/daily` is served but the client has no caller for it, and
-`platform.now()` is computed but unread.
+asynchronous comparison. `GET /api/v1/daily` is served but the client has no caller for it.
 
 ---
 
