@@ -787,17 +787,22 @@ export class JewelScene {
   }
 
   /**
-   * Frame the board inside the safe rect (canvas minus the wider side of the
-   * DOM insets, applied symmetrically so the board stays optically centered).
+   * Frame the board inside the safe rect (canvas minus the DOM insets,
+   * applied through a view offset so the board is centred in the free area).
    */
   _refitCamera() {
     if (!this.width) return;
     const w = this.canvas.clientWidth || window.innerWidth;
     const h = this.canvas.clientHeight || window.innerHeight;
-    const insetX = Math.max(this.insets.left, this.insets.right);
-    const insetY = Math.max(this.insets.top, this.insets.bottom);
-    const safeW = Math.max(200, w - insetX * 2);
-    const safeH = Math.max(200, h - insetY * 2);
+    // Safe rect = canvas minus the DOM insets, applied asymmetrically through a
+    // camera view offset so the board is centred in the uncovered area.
+    const ins = this.insets;
+    const safeW = Math.max(160, w - ins.left - ins.right);
+    const safeH = Math.max(160, h - ins.top - ins.bottom);
+    const offX = Math.min(ins.left, w - safeW), offY = Math.min(ins.top, h - safeH);
+    this.camera.aspect = safeW / safeH;
+    this.camera.setViewOffset(safeW, safeH, -offX, -offY, w, h);
+    this.camera.updateProjectionMatrix();
 
     const preset = CAMERA_PRESETS[this.cameraPreset || 'default'];
     const pitch = preset.pitch;
@@ -812,7 +817,27 @@ export class JewelScene {
     const hfov = 2 * Math.atan(Math.tan(vfov / 2) * (safeW / safeH));
     const distV = (projH / 2) * FIT_MARGIN / Math.tan(vfov / 2);
     const distH = (projW / 2) * FIT_MARGIN / Math.tan(hfov / 2);
-    const dist = Math.max(distV, distH);
+    let dist = Math.max(distV, distH);
+
+    // Refine against the actual projection: the near edge of the tilted
+    // board sits closer to the camera and spreads wider than the centre-
+    // distance estimate, which crops the outer columns on narrow viewports.
+    const probe = this._probeCam || (this._probeCam = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 200));
+    probe.aspect = safeW / safeH;
+    probe.updateProjectionMatrix();
+    const look = new THREE.Vector3(0, 0, boardD * 0.06);
+    const corners = [];
+    for (const x of [-boardW / 2 - 0.4, boardW / 2 + 0.4]) for (const z of [-boardD / 2 - 0.4, boardD / 2 + 0.4]) for (const y of [0, 0.9]) corners.push(new THREE.Vector3(x, y, z));
+    const v = new THREE.Vector3();
+    for (let i = 0; i < 10; i++) {
+      probe.position.set(Math.sin(yaw) * Math.cos(pitch) * dist, Math.sin(pitch) * dist, Math.cos(yaw) * Math.cos(pitch) * dist);
+      probe.lookAt(look);
+      probe.updateMatrixWorld();
+      let worst = 0;
+      for (const c of corners) { v.copy(c).project(probe); worst = Math.max(worst, Math.abs(v.x), Math.abs(v.y)); }
+      if (worst <= 0.95) break;
+      dist *= Math.min(1.5, worst / 0.95 + 0.01);
+    }
 
     const cp = this._camSpring;
     cp.targetPos.set(

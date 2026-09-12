@@ -810,14 +810,24 @@ export function initUI(deps) {
     while (overlayStack.length) closeOverlay(overlayStack[overlayStack.length - 1].name);
     $('tutorial-banner').hidden = true;
     $('ready-overlay').hidden = true;
+    updateInsets();
   }
 
   /* ============ countdown ============ */
 
   let countdownTimers = [];
+  function clearCountdown() {
+    countdownTimers.forEach(clearTimeout);
+    countdownTimers = [];
+    const overlay = $('ready-overlay');
+    overlay.hidden = true;
+    overlay.setAttribute('aria-hidden', 'true');
+  }
   function runCountdown() {
     const overlay = $('ready-overlay');
     const text = $('ready-text');
+    clearCountdown();
+    text.textContent = '';
     const steps = ['Ready…', 'Set…', 'Go!'];
     overlay.hidden = false;
     overlay.setAttribute('aria-hidden', 'false');
@@ -839,6 +849,8 @@ export function initUI(deps) {
     countdownTimers.push(
       setTimeout(() => {
         overlay.hidden = true;
+        overlay.setAttribute('aria-hidden', 'true');
+        text.textContent = '';
         session.beginPlay('countdown-complete');
         announce('Go! ' + (session.content ? session.content.name : ''), true);
       }, steps.length * 620 + 120)
@@ -1020,6 +1032,7 @@ export function initUI(deps) {
     banner.hidden = false;
     $('tutorial-text').textContent = s.text;
     $('tutorial-step-count').textContent = 'Step ' + (lesson.i + 1) + ' of ' + lesson.steps.length;
+    requestAnimationFrame(updateInsets); // banner height now known: keep the board above it
     $('btn-lesson-end').textContent = 'End lesson';
     analytics.track('tutorial_step', { id: lesson.content.tutorial, step: lesson.i });
     announce('Lesson step ' + (lesson.i + 1) + ' of ' + lesson.steps.length + '. ' + s.text, true);
@@ -2164,9 +2177,20 @@ export function initUI(deps) {
         insets.left = leftRail.offsetWidth + 16;
         insets.right = rightRail.offsetWidth + 16;
       }
-      insets.top = status.offsetHeight + 8;
+      // the status HUD is a top bar, or a side column in short landscape
+      if (status.offsetHeight > status.offsetWidth) insets.left = Math.max(insets.left, status.offsetWidth + 8);
+      else insets.top = status.offsetHeight + 8;
       if (!wide && window.innerHeight > window.innerWidth) {
         insets.bottom = tray.offsetHeight + 8;
+      }
+      // The lesson banner is carved out of the board's safe rect: a bottom
+      // band normally, a right-hand column when it docks beside the board
+      // (short landscape).
+      const banner = $('tutorial-banner');
+      if (banner && !banner.hidden) {
+        const r = banner.getBoundingClientRect();
+        if (r.width < window.innerWidth * 0.6 && r.left > window.innerWidth * 0.5) insets.right = Math.max(insets.right, window.innerWidth - r.left + 8);
+        else insets.bottom = Math.max(insets.bottom, window.innerHeight - r.top + 8);
       }
     }
     scene.setViewportInsets(insets);
