@@ -9,6 +9,9 @@
   <title>Jewel Cascade</title>
   <link rel="icon" href="assets/favicon.svg" type="image/svg+xml">
   <link rel="stylesheet" href="css/style.css">
+  <script type="importmap">
+    { "imports": { "three": "./vendor/three.module.js", "three/addons/": "./vendor/three/addons/" } }
+  </script>
 </head>
 <body>
   <noscript>
@@ -316,19 +319,12 @@
               </div>
             </details>
 
-            <details class="set-group">
-              <summary>Graphics</summary>
-              <div class="set-grid">
-                <label for="set-tier">Quality tier</label>
-                <select id="set-tier">
-                  <option value="auto">Auto</option>
-                  <option value="low">Low</option>
-                  <option value="medium">Medium</option>
-                  <option value="high">High</option>
-                </select>
-                <label for="set-render-scale">Render scale</label>
-                <input type="range" id="set-render-scale" min="50" max="100" step="5">
-              </div>
+            <details class="set-group" id="set-gfx-group" data-settings-section="graphics">
+              <summary id="gfx-title">Graphics</summary>
+              <!-- Filled by js/ui/gfx-panel.js (localized controls). -->
+              <div class="set-grid gfx-grid" id="gfx-grid"></div>
+              <p class="dim gfx-summary" id="gfx-summary" aria-live="polite"></p>
+              <p class="gfx-note" id="gfx-post-note" hidden></p>
             </details>
 
             <details class="set-group">

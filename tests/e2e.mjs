@@ -87,7 +87,7 @@ async function runPass(browser, vp) {
   const errors = [];
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
-    if (m.type() !== 'error') return;
+    if (m.type() !== 'error' && m.type() !== 'warning') return;
     const url = (m.location() && m.location().url) || '';
     if (browserNoise.test(m.text()) || /\/api\/v1/.test(url)) return;
     errors.push(`console: ${m.text()} (${url || 'no url'})`);
@@ -127,6 +127,47 @@ async function runPass(browser, vp) {
       await page.waitForSelector(screenVisible('title'), { timeout: 20000 });
       await page.waitForSelector('#btn-play', { state: 'visible' });
       await page.screenshot({ path: SHOT('title', vp.name) });
+    });
+
+    await step('settings → Graphics: presets, override, persistence', async () => {
+      const openGraphics = async () => {
+        await page.click('.nav-btn[data-nav="settings"]');
+        await page.waitForSelector(screenVisible('settings'), { timeout: 5000 });
+        if (!(await page.evaluate(() => document.getElementById('set-gfx-group').open))) await page.click('#gfx-title');
+        await page.waitForSelector('#gfx-preset', { state: 'visible' });
+      };
+      const canvasPreset = () => page.getAttribute('#game-canvas', 'data-gfx-preset');
+      await openGraphics();
+      // Headless runs use a software GPU, so Auto resolves to Low.
+      const autoLabel = await page.textContent('#gfx-preset option[value="auto"]');
+      if (!/Low/.test(autoLabel)) throw new Error(`Auto should detect Low on a software GPU, got "${autoLabel}"`);
+      await page.selectOption('#gfx-preset', 'low');
+      await page.waitForFunction(() => document.getElementById('game-canvas').dataset.gfxPreset === 'low');
+      await page.waitForFunction(() => document.getElementById('game-canvas').dataset.gfxPost === 'off');
+      await page.selectOption('#gfx-preset', 'ultra');
+      await page.waitForFunction(() => document.getElementById('game-canvas').dataset.gfxPost === 'on', null, { timeout: 10000 });
+      await page.waitForTimeout(500);
+      await page.selectOption('#gfx-preset', 'high');
+      if ((await canvasPreset()) !== 'high') throw new Error('High preset not applied');
+      await page.selectOption('#gfx-bloom', 'off');
+      await page.check('#gfx-show-fps');
+      await page.waitForSelector('#fps-meter', { state: 'visible' });
+      const summary = await page.textContent('#gfx-summary');
+      if (!/1024² shadows/.test(summary) || /bloom/.test(summary)) throw new Error(`summary does not reflect High + bloom off: ${summary}`);
+      await page.screenshot({ path: SHOT('graphics', vp.name) });
+      await page.reload({ waitUntil: 'load' });
+      await page.waitForSelector(screenVisible('title'), { timeout: 20000 });
+      if ((await canvasPreset()) !== 'high') throw new Error('preset did not survive reload');
+      await openGraphics();
+      if ((await page.inputValue('#gfx-preset')) !== 'high') throw new Error('preset select not restored');
+      if ((await page.inputValue('#gfx-bloom')) !== 'off') throw new Error('bloom override not restored');
+      // Choosing a preset clears overrides; go back to Auto for the rest of the run.
+      await page.selectOption('#gfx-preset', 'auto');
+      if ((await page.inputValue('#gfx-bloom')) !== 'preset') throw new Error('preset change did not clear overrides');
+      await page.uncheck('#gfx-show-fps');
+      await page.waitForFunction(() => document.getElementById('game-canvas').dataset.gfxPreset === 'low');
+      await page.click('#btn-settings-close');
+      await page.waitForSelector('[data-screen="settings"]', { state: 'hidden', timeout: 5000 });
     });
 
     await step('title → mode select', async () => {
@@ -276,7 +317,7 @@ try {
   const base = `http://127.0.0.1:${server.address().port}`;
   browser = await chromium.launch({
     executablePath: '/usr/bin/google-chrome',
-    args: ['--no-sandbox', '--enable-unsafe-swiftshader'],
+    args: ['--no-sandbox', '--use-angle=swiftshader', '--enable-unsafe-swiftshader'],
   });
 
   await runPass(browser, { name: 'desktop', width: 1280, height: 800, base });

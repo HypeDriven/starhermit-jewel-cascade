@@ -39,16 +39,6 @@ function detectWebGL() {
   }
 }
 
-function pickAutoTier() {
-  const dpr = window.devicePixelRatio || 1;
-  const cores = navigator.hardwareConcurrency || 4;
-  const mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent);
-  if (mobile && (cores <= 4 || dpr > 2.5)) return 'low';
-  if (mobile) return 'medium';
-  if (cores >= 8 && dpr >= 1.5) return 'high';
-  return cores >= 4 ? 'high' : 'medium';
-}
-
 async function boot() {
   const webglAvailable = detectWebGL();
   const settings = storage.loadSettings();
@@ -107,10 +97,8 @@ async function boot() {
   }
   function applyGraphics() {
     if (!scene) return;
-    const tier = settings.graphics.tier === 'auto' ? pickAutoTier() : settings.graphics.tier;
-    scene.setQualityTier(tier);
-    scene.setRenderScale(settings.graphics.renderScale || 1);
     scene.setReducedMotion(!!settings.motion.reduced);
+    scene.setGraphics(settings.graphics);
     scene.setCameraPreset(settings.camera.preset || 'default');
     const palette = JEWEL_PALETTES[settings.display.palette] || JEWEL_PALETTES.default;
     scene.setPalette(palette);
@@ -222,37 +210,8 @@ async function boot() {
     }, 250);
   });
 
-  /* ---------------- adaptive render scale (auto governor) ---------------- */
-  if (scene) {
-    let lowSince = 0;
-    let highSince = 0;
-    setInterval(() => {
-      if (settings.graphics.tier !== 'auto') return;
-      const stats = scene.getStats ? scene.getStats() : null;
-      if (!stats || !stats.fps) return;
-      const now = performance.now();
-      if (stats.fps < 45) {
-        lowSince = lowSince || now;
-        highSince = 0;
-        if (now - lowSince > 2000 && settings.graphics.renderScale > 0.55) {
-          settings.graphics.renderScale = Math.max(0.55, +(settings.graphics.renderScale - 0.15).toFixed(2));
-          scene.setRenderScale(settings.graphics.renderScale);
-          lowSince = 0;
-        }
-      } else if (stats.fps > 58) {
-        highSince = highSince || now;
-        lowSince = 0;
-        if (now - highSince > 10000 && settings.graphics.renderScale < 1) {
-          settings.graphics.renderScale = Math.min(1, +(settings.graphics.renderScale + 0.15).toFixed(2));
-          scene.setRenderScale(settings.graphics.renderScale);
-          highSince = 0;
-        }
-      } else {
-        lowSince = 0;
-        highSince = 0;
-      }
-    }, 1000);
-  }
+  // Adaptive resolution lives in the renderer (scene._adapt), driven by the
+  // graphics settings' `adaptive` flag.
 
   /* ---------------- presence + cloud save ---------------- */
   setInterval(() => {

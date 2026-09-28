@@ -9,6 +9,7 @@
  */
 
 import { fnv1a, stableStringify } from './engine/rng.js';
+import { migrate as migrateGraphics } from './render/gfx.js';
 
 const PREFIX = 'jewelcascade.';
 export const SETTINGS_VERSION = 1;
@@ -24,7 +25,8 @@ export function defaultSettings() {
   return {
     version: SETTINGS_VERSION,
     audio: { master: 0.8, music: 0.65, effects: 0.9, ambience: 0.55, voice: 0.8, muted: false },
-    graphics: { tier: 'auto', renderScale: 1 }, // tier: auto | low | medium | high
+    // preset: auto | low | balanced | high | ultra; per-category overrides as in render/gfx.js
+    graphics: { preset: 'auto', render_scale: 1, adaptive: true, show_fps: false },
     motion: { reduced: false }, // follows prefers-reduced-motion until changed
     display: {
       highContrast: false,
@@ -156,7 +158,7 @@ export function loadSettings() {
     ...d,
     ...s,
     audio: { ...d.audio, ...(s.audio || {}) },
-    graphics: { ...d.graphics, ...(s.graphics || {}) },
+    graphics: { ...d.graphics, ...migrateGraphics(s.graphics || {}) },
     motion: { ...d.motion, ...(s.motion || {}) },
     display: { ...d.display, ...(s.display || {}) },
     input: { ...d.input, ...(s.input || {}) },

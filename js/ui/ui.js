@@ -17,6 +17,7 @@ import { SPECIAL_NAMES, SPECIAL } from '../engine/rules.js';
 import * as content from '../engine/content.js';
 import { ACHIEVEMENTS, MASTERY_LEVELS, masteryLevelForXp } from '../engine/achievements.js';
 import { THEMES } from '../engine/themes.js';
+import { initGraphicsPanel } from './gfx-panel.js';
 
 /* ------------------------------------------------------------------ *
  *  Constants
@@ -1693,8 +1694,7 @@ export function initUI(deps) {
     $('set-ambience').value = Math.round(settings.audio.ambience * 100);
     $('set-voice').value = Math.round(settings.audio.voice * 100);
     $('set-muted').checked = !!settings.audio.muted;
-    $('set-tier').value = settings.graphics.tier;
-    $('set-render-scale').value = Math.round((settings.graphics.renderScale || 1) * 100);
+    if (gfxPanel) gfxPanel.sync();
     $('set-palette').value = settings.display.palette;
     $('set-text-size').value = settings.display.textSize;
     $('set-high-contrast').checked = !!settings.display.highContrast;
@@ -1756,16 +1756,7 @@ export function initUI(deps) {
     });
   }
 
-  $('set-tier').addEventListener('change', () => {
-    settings.graphics.tier = $('set-tier').value;
-    settingsChanged('graphics.tier');
-    applyGraphics();
-  });
-  $('set-render-scale').addEventListener('input', () => {
-    settings.graphics.renderScale = Number($('set-render-scale').value) / 100;
-    settingsChanged('graphics.renderScale');
-    applyGraphics();
-  });
+  const gfxPanel = initGraphicsPanel({ settings, storage, scene, applyGraphics, onChange: settingsChanged });
   $('set-palette').addEventListener('change', () => {
     settings.display.palette = $('set-palette').value;
     settingsChanged('display.palette');

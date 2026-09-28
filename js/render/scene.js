@@ -4,8 +4,10 @@
  * The jewel workshop suspended in warm twilight: an authored camera over a
  * workbench, original procedural gem geometry (one silhouette per color so
  * color is always reinforced by shape), PBR lighting with one dominant key,
- * pooled particles, and quality tiers that scale shadows/DPR/props/particles
- * without ever touching rules or hazard legibility.
+ * pooled particles, image-based lighting and an optional post chain (GTAO,
+ * bloom, colour grade, FXAA/SMAA). Graphics settings (render/gfx.js) scale
+ * shadows/DPR/props/particles/effects without ever touching rules or hazard
+ * legibility.
  *
  * Contract with the session (see main.js):
  *   buildBoard(state)            — (re)build the board from a rules state
@@ -16,7 +18,7 @@
  *   skipSettle()                 — jump cosmetics to the deterministic end
  *   onSwap(ax,ay,bx,by)          — assigned by the host; the only play input
  *   showHint(mv)/clearHint(), flashInvalid(idx, reason)
- *   setTheme/setPalette/setQualityTier/setRenderScale/setReducedMotion/
+ *   setTheme/setPalette/setGraphics/graphicsInfo/setReducedMotion/
  *   setCameraPreset/setPaused/setHidden/resize/getStats
  *   cursorMove/cursorConfirm/cursorCancel — keyboard board navigation
  *   setViewportInsets({left,right,top,bottom}) — shared layout model so the
@@ -29,6 +31,16 @@
  */
 
 import * as THREE from '../../vendor/three.module.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { GTAOPass } from 'three/addons/postprocessing/GTAOPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
+import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
+import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
+import { detectPreset, resolve, describe, SHADOW_MAP, PARTICLE_CAP, DUST_COUNT, GLINT_COUNT } from './gfx.js';
 import { Rng, fnv1a } from '../engine/rng.js';
 import { SPECIAL } from '../engine/rules.js';
 
@@ -62,10 +74,7 @@ const SLOT = {
 };
 const FAST_MULTIPLIER = 0.55;
 
-const PARTICLE_CAP = { low: 512, medium: 1024, high: 2048 };
-const DUST_COUNT = { low: 0, medium: 90, high: 170 };
-const DPR_CAP = { low: 1.0, medium: 1.5, high: 2.0 };
-const SHADOW_MAP = { low: 0, medium: 512, high: 1024 };
+const GLINT_CAP = 16;
 
 const SHAKE_TIERS = { ack: 0.0, move: 0.012, combo: 0.03, round: 0.05 };
 
@@ -97,17 +106,151 @@ function buildGemGeometries() {
 }
 
 function makeGemMaterials(palette) {
+  // Physical gems: the clearcoat layer (enabled with `detail`) adds a sharp
+  // lacquer highlight over each facet; env reflections come from scene IBL.
   return palette.map((hex) => {
     const color = new THREE.Color(hex);
-    return new THREE.MeshStandardMaterial({
+    return new THREE.MeshPhysicalMaterial({
       color,
       roughness: 0.28,
       metalness: 0.08,
       flatShading: true,
       emissive: color.clone().multiplyScalar(0.16),
+      envMapIntensity: 0.3,
+      clearcoat: 0,
+      clearcoatRoughness: 0.06,
     });
   });
 }
+
+/* ------------------------------------------------------------------ *
+ *  Procedural textures (deterministic canvas art, built once)
+ * ------------------------------------------------------------------ */
+
+function canvasTexture(size, draw, srgb = true) {
+  const c = document.createElement('canvas');
+  c.width = c.height = size;
+  const ctx = c.getContext('2d');
+  draw(ctx, size);
+  const tex = new THREE.CanvasTexture(c);
+  if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
+  tex.anisotropy = 4;
+  return tex;
+}
+
+/** Walnut grain: concentric growth rings plus streaks, as a light multiplier. */
+function woodTexture(rng) {
+  return canvasTexture(512, (ctx, n) => {
+    ctx.fillStyle = '#e8e2dc';
+    ctx.fillRect(0, 0, n, n);
+    // Long, gently waving grain lines (straight-cut plank, not end grain).
+    for (let y = 0; y < n; y += 2 + rng.next() * 5) {
+      ctx.strokeStyle = `rgba(80,52,34,${0.04 + rng.next() * 0.08})`;
+      ctx.lineWidth = 0.8 + rng.next() * 2;
+      ctx.beginPath();
+      const amp = 2 + rng.next() * 6;
+      const ph = rng.next() * TWO_PI;
+      for (let x = 0; x <= n; x += 16) ctx.lineTo(x, y + Math.sin(x / 70 + ph) * amp);
+      ctx.stroke();
+    }
+    for (let i = 0; i < 1400; i++) {
+      ctx.fillStyle = `rgba(${rng.next() < 0.5 ? '60,40,25' : '255,245,230'},${0.03 + rng.next() * 0.05})`;
+      ctx.fillRect(rng.next() * n, rng.next() * n, 1 + rng.next() * 14, 1);
+    }
+  });
+}
+
+/** Cell tile: bevelled rim (light top-left, dark bottom-right) + faint grain. */
+function tileTexture(rng) {
+  return canvasTexture(128, (ctx, n) => {
+    ctx.fillStyle = '#f0ecef';
+    ctx.fillRect(0, 0, n, n);
+    for (let i = 0; i < 500; i++) {
+      ctx.fillStyle = `rgba(${rng.next() < 0.5 ? '0,0,0' : '255,255,255'},${0.03 + rng.next() * 0.04})`;
+      ctx.fillRect(rng.next() * n, rng.next() * n, 2, 2);
+    }
+    const b = 9;
+    ctx.fillStyle = 'rgba(255,255,255,0.28)';
+    ctx.beginPath(); ctx.moveTo(0, 0); ctx.lineTo(n, 0); ctx.lineTo(n - b, b); ctx.lineTo(b, b); ctx.lineTo(b, n - b); ctx.lineTo(0, n); ctx.fill();
+    ctx.fillStyle = 'rgba(0,0,0,0.32)';
+    ctx.beginPath(); ctx.moveTo(n, n); ctx.lineTo(0, n); ctx.lineTo(b, n - b); ctx.lineTo(n - b, n - b); ctx.lineTo(n - b, b); ctx.lineTo(n, 0); ctx.fill();
+    const g = ctx.createRadialGradient(n / 2, n / 2, n * 0.1, n / 2, n / 2, n * 0.7);
+    g.addColorStop(0, 'rgba(255,255,255,0.06)');
+    g.addColorStop(1, 'rgba(0,0,0,0.1)');
+    ctx.fillStyle = g;
+    ctx.fillRect(b, b, n - 2 * b, n - 2 * b);
+  });
+}
+
+/** Brushed-metal streaks for the brass frame (roughness map, linear). */
+function brushedTexture(rng) {
+  const tex = canvasTexture(256, (ctx, n) => {
+    ctx.fillStyle = '#9a9a9a';
+    ctx.fillRect(0, 0, n, n);
+    for (let i = 0; i < 900; i++) {
+      const v = Math.floor(110 + rng.next() * 110);
+      ctx.fillStyle = `rgba(${v},${v},${v},0.35)`;
+      ctx.fillRect(rng.next() * n, rng.next() * n, 20 + rng.next() * 90, 1);
+    }
+  }, false);
+  tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
+  return tex;
+}
+
+/** Soft round particle sprite (points are square without it). */
+function dotTexture() {
+  return canvasTexture(64, (ctx, n) => {
+    const g = ctx.createRadialGradient(n / 2, n / 2, 0, n / 2, n / 2, n / 2);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(0.35, 'rgba(255,255,255,0.8)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, n, n);
+  });
+}
+
+/** Four-point star glint for idle gem sparkle. */
+function glintTexture() {
+  return canvasTexture(64, (ctx, n) => {
+    const c = n / 2;
+    const g = ctx.createRadialGradient(c, c, 0, c, c, c * 0.5);
+    g.addColorStop(0, 'rgba(255,255,255,1)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(0, 0, n, n);
+    ctx.fillStyle = 'rgba(255,255,255,0.9)';
+    for (const [w, h] of [[n, 3], [3, n]]) {
+      const lg = ctx.createLinearGradient(c - w / 2, c - h / 2, c + w / 2, c + h / 2);
+      lg.addColorStop(0, 'rgba(255,255,255,0)');
+      lg.addColorStop(0.5, 'rgba(255,255,255,1)');
+      lg.addColorStop(1, 'rgba(255,255,255,0)');
+      ctx.fillStyle = lg;
+      ctx.fillRect(c - w / 2, c - h / 2, w, h);
+    }
+  });
+}
+
+// Colour grade + vignette (display-space colours in, display-space out).
+const GradeShader = {
+  uniforms: { tDiffuse: { value: null }, uAmount: { value: 1.0 }, uVignette: { value: 0.26 } },
+  vertexShader: `varying vec2 vUv; void main() { vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`,
+  fragmentShader: `
+    uniform sampler2D tDiffuse; uniform float uAmount; uniform float uVignette;
+    varying vec2 vUv;
+    void main() {
+      vec4 src = texture2D(tDiffuse, vUv);
+      vec3 c = clamp(src.rgb, 0.0, 1.0);
+      // Gentle S-curve contrast, richer saturation, warm highlights / violet shadows.
+      vec3 s = mix(c, c * c * (3.0 - 2.0 * c), 0.22);
+      float l = dot(s, vec3(0.299, 0.587, 0.114));
+      s = mix(vec3(l), s, 1.12);
+      s *= mix(vec3(0.97, 0.95, 1.05), vec3(1.04, 1.0, 0.95), smoothstep(0.2, 0.8, l));
+      c = mix(c, s, uAmount);
+      float d = length((vUv - 0.5) * vec2(1.0, 0.85));
+      c *= 1.0 - uVignette * smoothstep(0.38, 0.9, d);
+      gl_FragColor = vec4(c, src.a);
+    }`,
+};
 
 /* ------------------------------------------------------------------ *
  *  Tween engine (schedule-time allocation only; the frame loop allocs none)
@@ -144,11 +287,13 @@ class ParticlePool {
     geo.setAttribute('color', new THREE.BufferAttribute(this.col, 3).setUsage(THREE.DynamicDrawUsage));
     geo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 100);
     this.mat = new THREE.PointsMaterial({
-      size: 0.09,
+      size: 0.12,
+      map: dotTexture(),
       vertexColors: true,
       transparent: true,
-      opacity: 0.9,
+      opacity: 0.95,
       depthWrite: false,
+      blending: THREE.AdditiveBlending,
       sizeAttenuation: true,
     });
     this.points = new THREE.Points(geo, this.mat);
@@ -312,8 +457,13 @@ export class JewelScene {
     this.onSettled = null; // assigned by host
     this.onContextLost = null;
 
-    this.tier = 'high';
-    this.renderScale = 1;
+    this.q = null; // resolved graphics settings (render/gfx.js)
+    this.adaptiveScale = 1;
+    this.pixelRatio = 1;
+    this.composer = null;
+    this.postKey = null;
+    this.postFailed = false;
+    this._frames = [];
     this.reducedMotion = false;
     this.paused = false;
     this.hidden = false;
@@ -370,6 +520,7 @@ export class JewelScene {
     this._initEnvironment();
     this._initMarkers();
     this._initInput();
+    this.setGraphics(this.settings.graphics || {});
     this._startLoop();
   }
 
@@ -385,9 +536,16 @@ export class JewelScene {
     this.renderer.outputColorSpace = THREE.SRGBColorSpace;
     this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
     this.renderer.toneMappingExposure = 1.05;
-    this.renderer.shadowMap.enabled = true;
+    this.renderer.shadowMap.enabled = false;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    this.renderer.setClearColor('#1a1226', 1);
+    this.gpu = JewelScene._gpuName(this.renderer);
+    let mobile = false;
+    try {
+      mobile = /Android|iPhone|iPad|Mobile/i.test(navigator.userAgent) || window.matchMedia('(pointer: coarse)').matches;
+    } catch {
+      /* non-fatal */
+    }
+    this.detected = detectPreset(this.gpu, { mobile });
 
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
@@ -409,8 +567,20 @@ export class JewelScene {
     });
   }
 
+  static _gpuName(r) {
+    try {
+      const gl = r.getContext();
+      const ext = gl.getExtension('WEBGL_debug_renderer_info');
+      return String(gl.getParameter(ext ? ext.UNMASKED_RENDERER_WEBGL : gl.RENDERER) || '');
+    } catch {
+      return '';
+    }
+  }
+
   _initSceneGraph() {
     this.scene = new THREE.Scene();
+    // Background via the scene (not the clear colour) so post targets match.
+    this.scene.background = new THREE.Color('#1a1226');
     this.scene.fog = new THREE.FogExp2('#4a2c5a', 0.028);
 
     this.camera = new THREE.PerspectiveCamera(CAMERA_FOV, 1, 0.1, 200);
@@ -434,8 +604,10 @@ export class JewelScene {
     this.keyLight.shadow.camera.top = 8;
     this.keyLight.shadow.camera.bottom = -8;
     this.keyLight.shadow.camera.far = 40;
-    this.keyLight.shadow.bias = -0.0015;
-    this.scene.add(this.keyLight);
+    this.keyLight.shadow.bias = -0.0008;
+    this.keyLight.shadow.normalBias = 0.02;
+    this.keyLight.castShadow = false;
+    this.scene.add(this.keyLight, this.keyLight.target);
 
     this.fillLight = new THREE.DirectionalLight('#7a6cff', 0.55);
     this.fillLight.position.set(-6, 5, -3);
@@ -443,6 +615,19 @@ export class JewelScene {
 
     this.ambient = new THREE.AmbientLight('#5c4a7a', 0.5);
     this.scene.add(this.ambient);
+
+    // Hemisphere fill: cool sky above, warm bounce from the workbench below.
+    this.hemi = new THREE.HemisphereLight('#7a6cff', '#6b4a2f', 0.35);
+    this.scene.add(this.hemi);
+
+    // Image-based lighting (neutral studio room, prefiltered once) for reflections.
+    try {
+      const pmrem = new THREE.PMREMGenerator(this.renderer);
+      this.envTexture = pmrem.fromScene(new RoomEnvironment(this.renderer), 0.04).texture;
+      pmrem.dispose();
+    } catch {
+      this.envTexture = null;
+    }
 
     this.envGroup = new THREE.Group(); // environment modules
     this.boardGroup = new THREE.Group(); // cells, frame, blockers
@@ -490,7 +675,7 @@ export class JewelScene {
     // Workbench slab.
     this.table = new THREE.Mesh(
       new THREE.CylinderGeometry(11, 12.5, 1.4, 28),
-      new THREE.MeshStandardMaterial({ color: '#6b4a2f', roughness: 0.8, metalness: 0.05 })
+      new THREE.MeshStandardMaterial({ color: '#6b4a2f', roughness: 0.8, metalness: 0.05, envMapIntensity: 0.12 })
     );
     this.table.position.y = -0.78;
     this.table.receiveShadow = true;
@@ -499,7 +684,7 @@ export class JewelScene {
     // Rim under the slab.
     this.tableRim = new THREE.Mesh(
       new THREE.TorusGeometry(11.6, 0.22, 8, 40),
-      new THREE.MeshStandardMaterial({ color: '#c9973f', roughness: 0.4, metalness: 0.6 })
+      new THREE.MeshStandardMaterial({ color: '#c9973f', roughness: 0.4, metalness: 0.6, envMapIntensity: 0.7 })
     );
     this.tableRim.rotation.x = Math.PI / 2;
     this.tableRim.position.y = -0.12;
@@ -565,6 +750,36 @@ export class JewelScene {
     );
     this.envGroup.add(this.dust);
     this._dustTime = 0;
+
+    // Procedural surface detail (applied when graphics `detail` is detailed).
+    const texRng = new Rng(fnv1a('jc-tex'));
+    this.tex = {
+      wood: woodTexture(texRng),
+      tile: tileTexture(texRng),
+      brushed: brushedTexture(texRng),
+    };
+
+    // Idle gem glints: a few four-point stars that twinkle on random jewels.
+    this.glintPos = new Float32Array(GLINT_CAP * 3);
+    this.glintCol = new Float32Array(GLINT_CAP * 3);
+    this.glintLife = new Float32Array(GLINT_CAP);
+    for (let i = 0; i < GLINT_CAP; i++) {
+      this.glintPos[i * 3 + 1] = -1000;
+      this.glintLife[i] = -rng.next() * 2;
+    }
+    const glintGeo = new THREE.BufferGeometry();
+    glintGeo.setAttribute('position', new THREE.BufferAttribute(this.glintPos, 3).setUsage(THREE.DynamicDrawUsage));
+    glintGeo.setAttribute('color', new THREE.BufferAttribute(this.glintCol, 3).setUsage(THREE.DynamicDrawUsage));
+    glintGeo.boundingSphere = new THREE.Sphere(new THREE.Vector3(), 100);
+    this.glints = new THREE.Points(
+      glintGeo,
+      new THREE.PointsMaterial({ size: 0.42, map: glintTexture(), vertexColors: true, transparent: true, depthWrite: false, blending: THREE.AdditiveBlending, fog: false })
+    );
+    this.glints.frustumCulled = false;
+    this.glints.renderOrder = 21;
+    this.glints.visible = false;
+    this.fxGroup.add(this.glints);
+    this._glintCount = 0;
 
     // Effects pool + beams.
     this.particles = new ParticlePool(this.fxGroup, PARTICLE_CAP.high);
@@ -660,6 +875,10 @@ export class JewelScene {
     this.fillLight.intensity = t.light.fillIntensity;
     this.ambient.color.set(t.light.ambient);
     this.ambient.intensity = t.light.ambientIntensity;
+    this.hemi.color.set(t.light.fill);
+    this.hemi.groundColor.set(t.table.color);
+    this._ambientBase = t.light.ambientIntensity;
+    this._applyLightBalance();
     this.table.material.color.set(t.table.color);
     this.table.material.roughness = t.table.roughness;
     this.tableRim.material.color.set(t.board.frame);
@@ -675,6 +894,7 @@ export class JewelScene {
     this.palette = palette;
     if (!this.jewelMats) {
       this.jewelMats = makeGemMaterials(palette);
+      if (this.q && this.q.detail === 'detailed') for (const m of this.jewelMats) m.clearcoat = 1;
     } else {
       palette.forEach((hex, i) => {
         const c = new THREE.Color(hex);
@@ -684,32 +904,190 @@ export class JewelScene {
     }
   }
 
-  setQualityTier(tier) {
-    if (!DPR_CAP[tier]) tier = 'high';
-    this.tier = tier;
-    this._applySize();
-    const shadows = SHADOW_MAP[tier] > 0;
-    this.renderer.shadowMap.enabled = shadows;
-    this.keyLight.castShadow = shadows;
-    if (shadows) this.keyLight.shadow.mapSize.set(SHADOW_MAP[tier], SHADOW_MAP[tier]);
+  /* ================= graphics settings ================= */
+
+  /** Apply saved graphics settings (settings.graphics; `{}` = Auto). Live, no reload. */
+  setGraphics(saved) {
+    const g = resolve(saved || {}, this.detected);
+    this.q = g;
+    // Shadows: map size per tier; the frustum is fitted to the board in buildBoard.
+    const size = SHADOW_MAP[g.shadows];
+    this.renderer.shadowMap.enabled = size > 0;
+    this.keyLight.castShadow = size > 0;
+    if (size > 0 && this.keyLight.shadow.mapSize.x !== size) this.keyLight.shadow.mapSize.set(size, size);
     if (this.keyLight.shadow.map) {
       this.keyLight.shadow.map.dispose();
       this.keyLight.shadow.map = null;
     }
-    this.dust.visible = DUST_COUNT[tier] > 0;
-    this._dustVisible = DUST_COUNT[tier] || 0;
-    this.props.visible = tier !== 'low';
-    this.particles.setCapacityUsed(PARTICLE_CAP[tier]);
+    // Image-based reflections.
+    this.scene.environment = g.reflections === 'on' ? this.envTexture : null;
+    this._applyLightBalance();
+    // Particles, dust and idle glints.
+    this.particles.setCapacityUsed(PARTICLE_CAP[g.particles]);
+    this._dustVisible = DUST_COUNT[g.particles] || 0;
+    this.dust.visible = this._dustVisible > 0;
+    this._glintCount = GLINT_COUNT[g.particles] || 0;
+    // Surface detail: props, wood grain, bevelled tiles, brushed brass, clearcoat.
+    const detailed = g.detail === 'detailed';
+    this.props.visible = detailed;
+    this._setMap(this.table.material, 'map', detailed ? this.tex.wood : null);
+    this._setMap(this.tableRim.material, 'roughnessMap', detailed ? this.tex.brushed : null);
+    if (this.cellMesh) this._setMap(this.cellMesh.material, 'map', detailed ? this.tex.tile : null);
+    if (this.frameMesh) this._setMap(this.frameMesh.material, 'roughnessMap', detailed ? this.tex.brushed : null);
+    if (this.jewelMats) for (const m of this.jewelMats) m.clearcoat = detailed ? 1 : 0;
+    // Specials glow a little brighter when bloom can pick them up.
+    const glow = g.bloom === 'on' ? 1.7 : 1;
+    JewelView.bloomMaterial().emissiveIntensity = 0.7 * glow;
+    JewelView.prismMaterial().emissiveIntensity = 0.9 * glow;
+    this._applyMotion();
+    // Materials pick up shadow-map changes on recompile.
+    this.scene.traverse((o) => {
+      if (o.material && !o.isPoints) {
+        for (const m of Array.isArray(o.material) ? o.material : [o.material]) m.needsUpdate = true;
+      }
+    });
+    this.adaptiveScale = 1;
+    this._frames = [];
+    this.postFailed = false;
+    this.postKey = null; // rebuild the post chain on the next frame
+    this._fpsVisible(g.showFps);
+    this.canvas.dataset.gfxPreset = g.preset;
+    this.canvas.dataset.gfxAuto = g.auto ? 'true' : 'false';
+    document.body.dataset.gfxPreset = g.preset;
+    this._applySize();
   }
 
-  setRenderScale(scale) {
-    this.renderScale = Math.max(0.5, Math.min(1, scale || 1));
-    this._applySize();
+  /** What the settings panel shows: GPU, auto choice, resolved tiers, cost and frame rate. */
+  graphicsInfo(words) {
+    const size = this.renderer.getSize(this._v2d || (this._v2d = new THREE.Vector2()));
+    const px = [Math.round(size.x * this.pixelRatio), Math.round(size.y * this.pixelRatio)];
+    return {
+      gpu: this.gpu || 'unknown GPU',
+      detected: this.detected,
+      resolved: this.q,
+      summary: describe(this.q, px, words),
+      fps: Math.round(this._fps || 0),
+      adaptiveScale: Math.round(this.adaptiveScale * 100) / 100,
+      postFailed: !!this.postFailed,
+    };
+  }
+
+  _setMap(mat, slot, tex) {
+    if (mat[slot] === tex) return;
+    mat[slot] = tex;
+    mat.needsUpdate = true;
+  }
+
+  // With IBL on, the flat ambient term is trimmed so the board keeps its contrast.
+  _applyLightBalance() {
+    if (!this.ambient) return;
+    const base = this._ambientBase !== undefined ? this._ambientBase : 0.5;
+    const ibl = this.q && this.q.reflections === 'on';
+    this.ambient.intensity = base * (ibl ? 0.55 : 1);
+    this.hemi.intensity = ibl ? 0.3 : 0.45;
+  }
+
+  _applyMotion() {
+    this._animatedBg = !!this.q && this.q.background === 'animated' && !this.reducedMotion;
+    if (!this._animatedBg) {
+      for (const lamp of this.lamps) {
+        lamp.rotation.z = 0;
+        lamp.children[1].material.emissiveIntensity = 2.2;
+      }
+      this.stars.material.opacity = 0.85;
+    }
+    if (!this._animatedBg || !this._glintCount) {
+      this.glints.visible = false;
+      for (let i = 0; i < GLINT_CAP; i++) this.glintPos[i * 3 + 1] = -1000;
+    }
+  }
+
+  _fpsVisible(on) {
+    let el = document.getElementById('fps-meter');
+    if (on && !el) {
+      el = document.createElement('div');
+      el.id = 'fps-meter';
+      el.setAttribute('aria-hidden', 'true');
+      el.textContent = '… fps';
+      document.body.append(el);
+    }
+    if (el) el.hidden = !on;
+  }
+
+  _postKey(w, h) {
+    const g = this.q;
+    return g.post ? [g.ao, g.bloom, g.grade, g.antialias, w, h, this.pixelRatio].join('|') : 'none';
+  }
+
+  _buildPost(w, h) {
+    const g = this.q;
+    if (this.composer) {
+      this.composer.passes.forEach((p) => p.dispose && p.dispose());
+      this.composer.dispose();
+    }
+    this.composer = null;
+    if (!g.post || this.postFailed) return;
+    try {
+      const pr = this.pixelRatio;
+      const W = Math.max(1, Math.round(w * pr));
+      const H = Math.max(1, Math.round(h * pr));
+      const target = new THREE.WebGLRenderTarget(W, H, {
+        type: THREE.HalfFloatType,
+        samples: g.antialias === 'msaa' ? 4 : 0,
+      });
+      const composer = new EffectComposer(this.renderer, target);
+      composer.setPixelRatio(pr);
+      composer.setSize(w, h);
+      composer.addPass(new RenderPass(this.scene, this.camera));
+      if (g.ao !== 'off') {
+        const ao = new GTAOPass(this.scene, this.camera, W, H);
+        ao.output = GTAOPass.OUTPUT.Default;
+        ao.blendIntensity = 0.75;
+        const hi = g.ao === 'high';
+        ao.updateGtaoMaterial({ radius: 0.35, distanceExponent: 1.4, thickness: 1.0, scale: 1.0, samples: hi ? 16 : 8 });
+        ao.updatePdMaterial({ lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: hi ? 6 : 4, rings: 2, samples: hi ? 16 : 8 });
+        composer.addPass(ao);
+      }
+      if (g.bloom === 'on') {
+        // High threshold: only lamps, glints, specials and specular highlights bloom.
+        composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.45, 0.4, 0.92));
+      }
+      composer.addPass(new OutputPass());
+      if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
+      if (g.antialias === 'smaa') composer.addPass(new SMAAPass(W, H));
+      if (g.antialias === 'fxaa') {
+        const fxaa = new ShaderPass(FXAAShader);
+        fxaa.material.uniforms.resolution.value.set(1 / W, 1 / H);
+        composer.addPass(fxaa);
+      }
+      this.composer = composer;
+    } catch {
+      // Post-processing is an enhancement: render directly if the chain cannot be built.
+      this.postFailed = true;
+      this.composer = null;
+    }
+  }
+
+  // Adaptive resolution: step the render scale down when frames are slow, back up when fast.
+  _adapt(dtMs) {
+    const f = this._frames;
+    f.push(dtMs);
+    if (f.length < 90) return false;
+    const avg = f.reduce((a, b) => a + b, 0) / f.length;
+    f.length = 0;
+    const el = document.getElementById('fps-meter');
+    if (el && !el.hidden) el.textContent = `${Math.round(1000 / avg)} fps · ${Math.round(this.pixelRatio * 100) / 100}×`;
+    if (!this.q.adaptive) return false;
+    const before = this.adaptiveScale;
+    if (avg > 26) this.adaptiveScale = Math.max(0.6, +(this.adaptiveScale - 0.1).toFixed(2));
+    else if (avg < 14 && this.adaptiveScale < 1) this.adaptiveScale = Math.min(1, +(this.adaptiveScale + 0.05).toFixed(2));
+    return before !== this.adaptiveScale;
   }
 
   setReducedMotion(b) {
     this.reducedMotion = !!b;
     if (this.reducedMotion) this.shake.amp = 0;
+    if (this.q) this._applyMotion();
   }
 
   /** Cosmetic board frame (never touches rules, timing, or information). */
@@ -779,11 +1157,22 @@ export class JewelScene {
   _applySize() {
     const w = this.canvas.clientWidth || window.innerWidth;
     const h = this.canvas.clientHeight || window.innerHeight;
-    const dpr = Math.min(window.devicePixelRatio || 1, DPR_CAP[this.tier]) * this.renderScale;
-    this.renderer.setPixelRatio(dpr);
-    this.renderer.setSize(w, h, false);
+    this._applyPixelRatio();
     this.camera.aspect = w / h;
     this.camera.updateProjectionMatrix();
+    if (this.width) this._refitCamera();
+  }
+
+  /** Pixel ratio = min(dpr, preset cap) × preset/render scale × adaptive scale. */
+  _applyPixelRatio() {
+    const w = this.canvas.clientWidth || window.innerWidth;
+    const h = this.canvas.clientHeight || window.innerHeight;
+    const q = this.q || { dprCap: 1, scale: 1 };
+    const dpr = Math.min(window.devicePixelRatio || 1, q.dprCap) * q.scale * this.adaptiveScale;
+    this.pixelRatio = dpr;
+    this.renderer.setPixelRatio(dpr);
+    this.renderer.setSize(w, h, false);
+    this._size = [w, h];
   }
 
   /**
@@ -915,7 +1304,8 @@ export class JewelScene {
     const theme = this.theme;
     const count = state.cells.length;
     const geo = new THREE.BoxGeometry(0.94, 0.1, 0.94);
-    const mat = new THREE.MeshStandardMaterial({ roughness: 0.6, metalness: 0.15 });
+    const detailed = this.q && this.q.detail === 'detailed';
+    const mat = new THREE.MeshStandardMaterial({ roughness: 0.55, metalness: 0.15, envMapIntensity: 0.2, map: detailed ? this.tex.tile : null });
     const mesh = new THREE.InstancedMesh(geo, mat, count);
     mesh.receiveShadow = true;
     const m4 = new THREE.Matrix4();
@@ -946,12 +1336,31 @@ export class JewelScene {
     const fd = this.height * CELL + 0.9;
     this.frameMesh = new THREE.Mesh(
       new THREE.BoxGeometry(fw, 0.22, fd),
-      new THREE.MeshStandardMaterial({ color: theme ? theme.board.frame : '#c9973f', roughness: 0.45, metalness: 0.5 })
+      new THREE.MeshStandardMaterial({
+        color: theme ? theme.board.frame : '#c9973f',
+        roughness: 0.45,
+        metalness: 0.5,
+        envMapIntensity: 0.6,
+        roughnessMap: detailed ? this.tex.brushed : null,
+      })
     );
     this.frameMesh.position.y = -0.2;
     this.frameMesh.receiveShadow = true;
+    this.frameMesh.castShadow = true;
+    this._fitShadow();
     this.boardGroup.add(this.frameMesh);
     if (this.frameStyle && this.frameStyle !== 'standard') this.setFrame(this.frameStyle);
+  }
+
+  /** Fit the key light's shadow box tightly around the board (plus jewel height). */
+  _fitShadow() {
+    const half = Math.max(this.width, this.height) * CELL * 0.5 + 1.2;
+    const sh = this.keyLight.shadow.camera;
+    const dir = this._v1.set(6, 10, 4).normalize();
+    this.keyLight.target.position.set(0, 0, 0);
+    this.keyLight.position.copy(dir).multiplyScalar(half + 8);
+    Object.assign(sh, { left: -half, right: half, top: half, bottom: -half, near: 0.5, far: half * 2 + 16 });
+    sh.updateProjectionMatrix();
   }
 
   _recolorCells() {
@@ -1567,7 +1976,7 @@ export class JewelScene {
 
   _burst(x, y, z, color, count, speed) {
     if (this.reducedMotion) count = Math.min(3, count);
-    if (this.tier === 'low') count = Math.floor(count / 2);
+    if (this.q && this.q.particles === 'low') count = Math.floor(count / 2);
     this.particles.burst(x, y, z, color, count, speed, 1);
     // Cosmetic trail variants: spark adds white glints, comet adds slow embers.
     if (this.trailStyle === 'spark') this.particles.burst(x, y + 0.1, z, '#ffffff', Math.ceil(count / 2), speed * 1.7, 0.7);
@@ -1907,9 +2316,33 @@ export class JewelScene {
       this._lastFrame = now;
       if (dt > 0) this._fps += (1 / dt - this._fps) * 0.06;
       this._update(now, dt);
-      this.renderer.render(this.scene, this.camera);
+      this._render(dt);
     };
     this._raf = requestAnimationFrame(loop);
+  }
+
+  _render(dt) {
+    if (this._adapt(dt * 1000)) this._applyPixelRatio();
+    const w = this.canvas.clientWidth || window.innerWidth;
+    const h = this.canvas.clientHeight || window.innerHeight;
+    if (!this._size || this._size[0] !== w || this._size[1] !== h) this._applyPixelRatio();
+    const key = this._postKey(w, h);
+    if (key !== this.postKey) {
+      this.postKey = key;
+      this._buildPost(w, h);
+      this.canvas.dataset.gfxPost = this.composer ? 'on' : 'off';
+    }
+    if (this.composer) {
+      try {
+        this.composer.render(dt);
+        return;
+      } catch {
+        this.postFailed = true;
+        this.composer = null;
+        this.canvas.dataset.gfxPost = 'off';
+      }
+    }
+    this.renderer.render(this.scene, this.camera);
   }
 
   _update(now, dt) {
@@ -1994,8 +2427,8 @@ export class JewelScene {
   }
 
   _updateDecor(dt, now) {
-    // Dust drift (deterministic phases; paused by reduced motion on low tier).
-    if (this.dust.visible && !this.reducedMotion) {
+    // Dust drift (deterministic phases; off with a static background or reduced motion).
+    if (this.dust.visible && this._animatedBg) {
       this._dustTime += dt;
       const t = this._dustTime;
       const n = this._dustVisible || DUST_COUNT.high;
@@ -2008,12 +2441,14 @@ export class JewelScene {
       }
       this.dust.geometry.attributes.position.needsUpdate = true;
     }
-    // Lamp sway + flicker.
-    if (!this.reducedMotion) {
+    // Lamp sway + flicker, star shimmer and idle gem glints.
+    if (this._animatedBg) {
       for (const lamp of this.lamps) {
         lamp.rotation.z = Math.sin(now * 0.4 + lamp.userData.phase) * 0.03;
         lamp.children[1].material.emissiveIntensity = 2.0 + Math.sin(now * 3.1 + lamp.userData.phase * 3) * 0.25;
       }
+      this.stars.material.opacity = 0.72 + Math.sin(now * 0.9) * 0.13;
+      if (this._glintCount) this._updateGlints(dt);
     }
     // Prism aura slow spin (any visible prism overlays).
     for (const v of this.viewAt.values()) {
@@ -2024,8 +2459,41 @@ export class JewelScene {
     }
   }
 
+  _updateGlints(dt) {
+    const views = this.viewAt.size ? [...this.viewAt.values()] : null;
+    let any = false;
+    for (let i = 0; i < GLINT_CAP; i++) {
+      if (i >= this._glintCount || !views) {
+        this.glintPos[i * 3 + 1] = -1000;
+        continue;
+      }
+      this.glintLife[i] += dt;
+      const t = this.glintLife[i];
+      if (t >= 0.9) {
+        // Respawn on a random settled jewel's upper facet after a short rest.
+        const v = views[Math.floor(this._decorRng.next() * views.length)];
+        const p = v.group.position;
+        this.glintPos[i * 3] = p.x + (this._decorRng.next() - 0.5) * 0.3;
+        this.glintPos[i * 3 + 1] = p.y + 0.18 + this._decorRng.next() * 0.12;
+        this.glintPos[i * 3 + 2] = p.z + (this._decorRng.next() - 0.5) * 0.3;
+        this.glintLife[i] = -this._decorRng.next() * 2.5;
+      }
+      // Fade in and out over 0.9 s; above 1.0 so bloom catches the peak.
+      const k = t < 0 ? 0 : Math.sin((Math.min(t, 0.9) / 0.9) * Math.PI);
+      const b = k * 1.6;
+      this.glintCol[i * 3] = b;
+      this.glintCol[i * 3 + 1] = b * 0.96;
+      this.glintCol[i * 3 + 2] = b * 0.88;
+      if (k > 0) any = true;
+    }
+    this.glints.visible = any;
+    this.glints.geometry.attributes.position.needsUpdate = true;
+    this.glints.geometry.attributes.color.needsUpdate = true;
+  }
+
   dispose() {
     this._disposed = true;
+    if (this.composer) this.composer.dispose();
     if (this._raf) cancelAnimationFrame(this._raf);
     this._raf = 0;
     if (this._settleTimer) clearTimeout(this._settleTimer);

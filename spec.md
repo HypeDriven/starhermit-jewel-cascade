@@ -25,15 +25,18 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 |---|---|
 | `index.html` | Static DOM shell: 13 screens, HUD, mirror board, live regions |
 | `css/style.css` | Full stylesheet: tokens, screens, responsive rules, a11y overrides |
-| `js/main.js` | Boot, cross-module wiring, tick loop, adaptive quality governor |
+| `js/main.js` | Boot, cross-module wiring, tick loop |
 | `js/session.js` | Round FSM, event bus, authoritative clock, results, progression |
 | `js/engine/rules.js` | Pure rules engine: board, swaps, cascades, specials, scoring, replay |
 | `js/engine/content.js` | Versioned content: lessons, journey, dailies, challenges, practice, chase, validators |
 | `js/engine/themes.js` | 5 visual themes + 4 colour-vision jewel palettes |
 | `js/engine/rng.js` | mulberry32 `Rng`, FNV-1a hashing, stable stringify |
 | `js/engine/achievements.js` | 5 achievements, career counters, 10 mastery levels |
-| `js/render/scene.js` | Three.js scene, board build, event-driven animation timeline, particles |
+| `js/render/scene.js` | Three.js scene, board build, event-driven animation timeline, particles, IBL, post chain, adaptive resolution |
+| `js/render/gfx.js` | Pure graphics quality model: presets, categories, GPU detection, `resolve()`, `describe()`, settings migration |
 | `js/ui/ui.js` | Screen manager, HUD, mirror board, settings, remapping, gamepad |
+| `js/ui/gfx-panel.js` | Settings → Graphics section (built at runtime, applies live) |
+| `js/ui/gfx-i18n.js` | Graphics panel strings for the nine required locales, locale picking |
 | `js/audio.js` | Buses, recorded one-shots, synth fallbacks, adaptive music, captions |
 | `js/platform.js` | StarHermit adapter (`/api/v1`): launch token + refresh, hosted profile/cloud/leaderboards, dev-server surface |
 | `js/storage.js` | Checksummed, versioned `localStorage` documents |
@@ -42,8 +45,10 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | `sfx/` | 37 Opus one-shots + `manifest.txt` (canonical) + `manifest.json` (generator) |
 | `assets/` | Generated key art (`title-keyart.webp`, `results-plate.webp`), `favicon.svg` |
 | `tests/run.mjs` | 61 unit / property / fuzz / golden / server tests |
-| `tests/e2e.mjs` | Playwright-core playthrough of the real UI, desktop + mobile |
-| `vendor/three.module.js` | Three.js |
+| `tests/gfx.test.mjs` | `node --test` unit tests for the graphics model and panel strings |
+| `tests/e2e.mjs` | Playwright-core playthrough of the real UI (incl. Graphics settings), desktop + mobile |
+| `vendor/three.module.js` | Three.js r161 (0.161.0) |
+| `vendor/three/addons/` | Same-revision three.js addons: EffectComposer + passes, shaders, `RoomEnvironment`; mapped by the `index.html` importmap (`three`, `three/addons/`) |
 
 ---
 
@@ -353,7 +358,8 @@ starless golden hour), *Frostbound Loft* (6), *Royal Velvet* (8).
 
 **Shape language.** Silhouette carries colour identity — ruby octahedron, amber dodecahedron, topaz
 tetrahedron, emerald elongated octahedron, sapphire icosahedron, amethyst hexagonal cone, opal
-sphere — flat-shaded, roughness 0.28, emissive at 16% of albedo, so all seven separate in greyscale.
+sphere — flat-shaded `MeshPhysicalMaterial`, roughness 0.28, emissive at 16% of albedo, environment
+reflections at 0.3 and (with surface detail) a clearcoat layer, so all seven separate in greyscale.
 Specials add an overlay rather than a recolour: torus rings for rays, a wireframe icosahedron for
 blooms (warm) and prisms (cool, slowly spinning).
 
@@ -372,6 +378,35 @@ to 1.22. The camera is a critically damped 1.6 Hz spring; shake is tiered and ti
 / 0.05). **Reduced motion** (OS-seeded, overridable) zeroes shake, caps bursts at 3 particles, skips
 the win celebration, stops dust drift and lamp flicker, and forces CSS transitions to 0.01 ms —
 nothing that carries information is animation-only.
+
+**Graphics.** The renderer uses ACES filmic tone mapping with sRGB output. Lighting is a warm key
+directional light whose PCF soft-shadow box is fitted to the board each build, a cool fill, a
+hemisphere fill (theme fill colour above, table colour below) and an ambient term that is trimmed
+when image-based lighting is on. Reflections come from a `PMREMGenerator`-filtered `RoomEnvironment`
+as `scene.environment`, with per-material strengths (gems 0.3, cells 0.2, brass 0.6–0.7, table
+0.12). Surface detail adds procedural canvas textures — straight walnut grain on the table,
+bevelled tile faces on the cells, brushed-brass roughness on the frame and rim — plus gem clearcoat
+and the table-top prop gems. Particle bursts use a soft round additive sprite; with an animated
+background, a few four-point glints twinkle on random settled jewels, stars shimmer, dust drifts
+and lamps sway and flicker (all stopped by reduced motion). The optional post chain is
+`RenderPass → GTAO → UnrealBloom (strength 0.45, threshold 0.92: lamps, glints, specials and
+specular highlights only) → OutputPass → colour grade (gentle S-curve, +12% saturation, warm
+highlights / violet shadows, vignette) → SMAA or FXAA`; MSAA uses a 4-sample target (or the
+canvas's own MSAA without post). Special overlays glow 1.7× brighter when bloom is on. The
+**Settings → Graphics** section offers a quality preset (Auto, chosen from the WebGL unmasked
+renderer string — SwiftShader/llvmpipe get Low, discrete GPUs and Apple M get High, everything else
+Balanced, and touch/mobile devices are capped at Balanced; Low; Balanced; High; Ultra), a render
+scale (50–200% of the preset's), one override per effect with "From preset (…)" as the default —
+shadows off/low/medium/high (512/1024/2048² maps), ambient occlusion off/on/high, bloom, colour
+grade, anti-aliasing off/FXAA/SMAA/MSAA, reflections, particles low/medium/high, background motion
+static/animated and surface detail plain/detailed — plus adaptive resolution (on by default) and a
+frame-rate readout (off by default; bottom-left on desktop, under the status bar on compact
+layouts, never intercepting input). A summary line reads "GPU · cost summary · W×H px". Choosing a
+preset clears overrides; every change applies immediately without reload and is saved in
+`settings.graphics` (older `{tier, renderScale}` settings migrate on load). If the post chain
+cannot be built or throws, the game renders without it and the panel says so. The canvas carries
+`data-gfx-preset`, `data-gfx-auto` and `data-gfx-post` for tests. The panel's strings are
+localized for all nine required locales from `navigator.language`.
 
 **Visual assets the design calls for:** a title backdrop reading as a lapidary's bench at dusk with
 room for a logo, a results illustration that says "the order was filled" without words, a favicon
@@ -456,8 +491,7 @@ Synth-only by design (no clip, deliberately): jewel fall and spawn ticks (`rules
 
 The product requires en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT.
 
-**Today the game ships English only.** `<html lang="en" dir="ltr">` is fixed; there is no string
-table, no locale detection and no `navigator.language` use. User-facing strings live hard-coded in
+**Today the game ships English only**, except the Settings → Graphics section, whose strings exist in all nine locales (`js/ui/gfx-i18n.js`, picked from `navigator.language`). `<html lang="en" dir="ltr">` is fixed; outside that section there is no string table and no locale detection. User-facing strings live hard-coded in
 two places: `index.html` (static screen copy) and `js/ui/ui.js` (`INVALID_TEXT` :28,
 `REASON_HEADLINES` :43, `ACTION_LABELS` :75, `COMPONENT_LABELS` :93, `COSMETIC_NAMES` :2019,
 the help cards :1899, and the goal-text builders :128), plus content, theme and achievement names
@@ -566,9 +600,13 @@ atomically via tmp-file + rename behind a per-file lock chain. A resume snapshot
 command log + roundId) is written after every accepted swap and offered on boot only if it
 probe-deserializes to a `ready` state.
 
-**Performance budgets.** Quality tiers set DPR caps 1.0/1.5/2.0, particle caps 512/1024/2048, dust
-0/90/170, shadow maps 0/512/1024. On `auto` a governor samples fps each second, dropping
-`renderScale` 0.15 (floor 0.55) after 2 s under 45 fps and restoring after 10 s over 58 fps.
+**Performance budgets.** Presets Low/Balanced/High/Ultra cap the device pixel ratio at 1/1.5/2/2
+(Ultra renders at 1.25× on top); pixel ratio = min(dpr, cap) × preset scale × render scale ×
+adaptive scale. Particle tiers set pool caps 512/1024/2048, dust 0/90/170 and idle glints 0/6/14;
+shadow maps are 0/512/1024/2048. Low renders straight to the canvas (no composer, no shadows, no
+IBL, no props, static background), so it costs no more than the old low tier. Adaptive resolution
+averages 90 frames: over 26 ms it steps the scale down 0.1 (floor 0.6), under 14 ms back up 0.05
+(max 1). The composer is rebuilt only when its key (effects, size, pixel ratio) changes.
 Particles are one `THREE.Points` draw call over fixed Float32Arrays; board cells are one instanced
 mesh; blast beams come from a pool of 8. Resize coalesces to one rAF; orientation change re-fits
 after 250 ms.
@@ -582,7 +620,10 @@ read-only, to read `legalActions(state)` and poll session status, never to mutat
 
 ## 14. Testing and acceptance criteria
 
-`npm test` → `node tests/run.mjs`: 15 suites, 61 cases, zero runtime dependencies. Coverage:
+`npm test` → `node tests/run.mjs` then `node --test tests/gfx.test.mjs` (GPU-string detection,
+mobile cap, `resolve()` presets/overrides/scale clamp, preset clears overrides, settings migration,
+cost summary, and every graphics string present in all nine locales). `tests/run.mjs`: 15 suites,
+61 cases, zero runtime dependencies. Coverage:
 deterministic board generation across 25 seeds (no initial match, ≥1 legal action); all eight
 rejection reasons; move accounting; every terminal state; each of the four specials created and
 detonated; ice and crate behaviour and scoring; undo exactness and hint determinism; serialization,
@@ -594,8 +635,11 @@ full lesson round and a timed round expiring; and three server tests covering co
 canonicalization, replay verification and submission validation.
 
 `npm run test:e2e` → `tests/e2e.mjs`, run at **1280×800** and at **390×844 with touch**, failing on
-any `pageerror` or console error (GPU/SwiftShader noise and `/api/v1/` 404s excepted). Ten steps:
-boot → title → mode select → practice setup (Easy) → countdown to active → hint and undo (asserting
+any `pageerror`, console error or console warning (GPU/SwiftShader noise and `/api/v1/` 404s excepted). Eleven steps:
+boot → title → **Settings → Graphics** (Auto shows the detected Low; switch Low → Ultra → High,
+checking `data-gfx-preset`/`data-gfx-post` on the canvas; override bloom off and show the frame
+rate; check the summary; reload and confirm preset and override persisted; back to Auto clears the
+override) → mode select → practice setup (Easy) → countdown to active → hint and undo (asserting
 `movesLeft` actually increased) → a keyboard-only swap on the text board → pause → settings →
 resume → up to 45 swaps to the end of the round (failing if a `ready` board ever has zero legal
 actions) → results → back to mode select. Screenshots at each stage.
