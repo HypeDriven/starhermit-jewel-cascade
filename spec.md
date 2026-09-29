@@ -727,3 +727,7 @@ actions) → results → back to mode select. Screenshots at each stage.
    `error` fire.
 4. **A distinct `time-expired` cue.** Timed rounds currently end on `level-fail.opus`; the design
    wants the clock running out to sound different from running out of moves.
+
+## Browser interference
+
+`browser-guard.js` (loaded from `index.html`) suppresses browser UI that gets in the way of play: the right-click context menu, the iOS long-press callout, copy / cut / paste, and page text selection. Text fields (inputs, textareas, selects, contenteditable) keep normal selection, context menu and clipboard behaviour.
