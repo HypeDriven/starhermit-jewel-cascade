@@ -3,8 +3,9 @@
  *
  * Funnel ONLY (spec §6/§8): 'start', 'tutorial_step', 'round_end', 'retry',
  * 'settings_change', 'error'. Random per-load session id; events are buffered
- * in memory (max 200) and flushed to /api/v1/telemetry via the platform
- * adapter only when telemetryConsent is given AND the game is hosted.
+ * in memory (max 200) only when telemetryConsent is given. Nothing is ever
+ * sent: the platform has no telemetry route and standalone play makes no
+ * network request, so flush() just drops the batch.
  * Session duration is reported as coarse bands, never raw timestamps.
  * No PII, no raw text, no pointer trails.
  *
@@ -94,18 +95,10 @@ export class Analytics {
     if (this.buffer.length >= FLUSH_THRESHOLD) this.flush();
   }
 
-  /** POST the buffered batch. No-op unless consent && hosted && online. */
+  /** Drop the buffered batch (no telemetry route exists; nothing leaves the device). */
   flush() {
-    if (!this.consent || this.buffer.length === 0) return false;
-    const p = this.platform;
-    if (!p || !p.hosted || p.online === false) return false;
-    const batch = { sessionId: this.sessionId, events: this.buffer.splice(0, this.buffer.length) };
-    Promise.resolve(p.sendTelemetry(batch)).catch(() => {
-      // Requeue (bounded) so a transient failure doesn't lose the funnel.
-      this.buffer = batch.events.concat(this.buffer);
-      if (this.buffer.length > BUFFER_MAX) this.buffer.splice(0, this.buffer.length - BUFFER_MAX);
-    });
-    return true;
+    this.buffer.length = 0;
+    return false;
   }
 
   dispose() {

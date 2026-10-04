@@ -14,10 +14,9 @@
  *
  * The repo's server.js is the StarHermit authoritative script, so this test
  * embeds its own minimal static server on an ephemeral port. The game is
- * designed to run offline: it probes /api/v1/time once at boot, gets a 404
- * from the static server, and continues in offline mode (js/platform.js).
- * That single 404 resource error per pass is expected and filtered out;
- * every other pageerror/console error fails the test.
+ * standalone without a launch token and must make zero same-origin /api or
+ * /ws requests (asserted across the whole standalone pass); any
+ * pageerror/console error fails the test.
  *
  * Run: npm run test:e2e
  */
@@ -26,6 +25,7 @@ import { promises as fsp, existsSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { chromium } from 'playwright-core';
+import { launchToken, stubStarHermit } from './starhermit-e2e.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const SHOT = (stage, vp) => `/tmp/jewel-cascade-e2e-${stage}-${vp}.png`;
@@ -48,8 +48,7 @@ const MIME = {
   '.ts': 'text/plain; charset=utf-8',
 };
 
-// Benign GPU/swiftshader noise (mirrors tools/production_game_audit.mjs),
-// plus the expected one-time 404 from the offline /api/v1/time probe.
+// Benign GPU/swiftshader noise (mirrors tools/production_game_audit.mjs).
 const browserNoise = /GL Driver Message|GPU stall due to ReadPixels|Automatic fallback to software WebGL|EnableWebGLDeveloperExtensions/i;
 
 function createStaticServer() {
@@ -83,13 +82,18 @@ async function runPass(browser, vp) {
     viewport: { width: vp.width, height: vp.height },
     hasTouch: isMobile,
   });
+  await context.grantPermissions(['clipboard-read', 'clipboard-write']);
   const page = await context.newPage();
   const errors = [];
+  // Standalone (no launch token) must not touch any own-server route.
+  const ownServer = [];
+  const onRequest = (r) => { const u = new URL(r.url()); if (/^https?:$/.test(u.protocol) && /^\/(api|ws)(\/|$)/.test(u.pathname)) ownServer.push(r.method() + ' ' + u.pathname); };
+  page.on('request', onRequest);
   page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
   page.on('console', (m) => {
     if (m.type() !== 'error' && m.type() !== 'warning') return;
     const url = (m.location() && m.location().url) || '';
-    if (browserNoise.test(m.text()) || /\/api\/v1/.test(url)) return;
+    if (browserNoise.test(m.text())) return;
     errors.push(`console: ${m.text()} (${url || 'no url'})`);
   });
 
@@ -301,6 +305,26 @@ async function runPass(browser, vp) {
       await page.click('#res-menu');
       await page.waitForSelector(screenVisible('mode-select'), { timeout: 5000 });
       await page.screenshot({ path: SHOT('back-to-modes', vp.name) });
+    });
+
+    await step('StarHermit: standalone makes no /api or /ws calls; launch token → nickname, invite toast', async () => {
+      await page.goto(vp.base, { waitUntil: 'load', timeout: 30000 });
+      await page.waitForSelector(screenVisible('title'), { timeout: 15000 });
+      if (await page.locator('#btn-invite:visible, #btn-signin:visible').count()) throw new Error('account buttons shown standalone');
+      if (ownServer.length) throw new Error('standalone requested ' + ownServer.join(', '));
+      page.off('request', onRequest);
+      const calls = await stubStarHermit(page);
+      await page.goto(vp.base + '/index.html#game_token=' + launchToken(), { waitUntil: 'load', timeout: 30000 });
+      await page.waitForSelector(screenVisible('title'), { timeout: 15000 });
+      await page.waitForFunction(() => /Al/.test(document.getElementById('chip-profile-sub').textContent));
+      if (page.url().includes('game_token')) throw new Error('token left in URL');
+      await page.click('#btn-invite');
+      await page.waitForSelector('#toast-region .toast', { timeout: 5000 });
+      const box = await page.locator('#toast-region .toast').last().boundingBox();
+      if (box.x < 0 || box.x + box.width > page.viewportSize().width + 1) throw new Error('toast cut off');
+      if (!calls.some((c) => c.includes('/cloud-saves/game%3Agid-1'))) throw new Error('no cloud-save load: ' + calls.join(', '));
+      await page.screenshot({ path: SHOT('signed-in', vp.name) });
+      await page.unroute(/\/api\/v1\//);
     });
   } finally {
     if (errors.length) {

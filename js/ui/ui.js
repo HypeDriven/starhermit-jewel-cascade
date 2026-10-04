@@ -18,6 +18,10 @@ import * as content from '../engine/content.js';
 import { ACHIEVEMENTS, MASTERY_LEVELS, masteryLevelForXp } from '../engine/achievements.js';
 import { THEMES } from '../engine/themes.js';
 import { initGraphicsPanel } from './gfx-panel.js';
+import { SH_STRINGS, pickLocale } from './gfx-i18n.js';
+
+/** StarHermit account strings for the player's locale. */
+const SH = SH_STRINGS[pickLocale(typeof navigator !== 'undefined' ? navigator.language : 'en-US')] || SH_STRINGS['en-US'];
 
 /* ------------------------------------------------------------------ *
  *  Constants
@@ -48,22 +52,32 @@ const REASON_HEADLINES = {
   'time-expired': 'Time expired',
 };
 
+// KeyboardEvent.code per action; mirrors the control.* lines in starhermit.txt.
 const DEFAULT_KEYBOARD = {
   up: 'ArrowUp',
   down: 'ArrowDown',
   left: 'ArrowLeft',
   right: 'ArrowRight',
   confirm: 'Enter',
-  confirm2: ' ',
+  confirm2: 'Space',
   cancel: 'Escape',
-  pause: 'p',
-  hint: 'h',
-  undo: 'u',
-  skip: 's',
-  camera: 'c',
-  mute: 'm',
-  help: '?',
+  pause: 'KeyP',
+  hint: 'KeyH',
+  undo: 'KeyU',
+  skip: 'KeyS',
+  camera: 'KeyC',
+  mute: 'KeyM',
+  help: 'Slash',
 };
+/** Older saves stored KeyboardEvent.key values; map them to codes. */
+function toCode(k) {
+  if (typeof k !== 'string' || !k) return null;
+  if (k === ' ') return 'Space';
+  if (k === '?' || k === '/') return 'Slash';
+  if (/^[a-z]$/i.test(k)) return 'Key' + k.toUpperCase();
+  if (/^[0-9]$/.test(k)) return 'Digit' + k;
+  return k;
+}
 const DEFAULT_GAMEPAD = {
   confirm: 0, // A / cross
   cancel: 1, // B / circle
@@ -122,9 +136,10 @@ function fmtTime(ms) {
   return m + ':' + String(s % 60).padStart(2, '0');
 }
 function keyLabel(code) {
-  if (code === ' ') return 'Space';
-  if (code === '?') return '?';
-  return code.replace(/^Arrow/, '');
+  if (Array.isArray(code)) return code.map(keyLabel).join('/');
+  if (code === 'Space' || code === ' ') return 'Space';
+  if (code === 'Slash' || code === '?') return '?';
+  return String(code).replace(/^Arrow/, '').replace(/^Key/, '').replace(/^Digit/, '');
 }
 function goalText(g) {
   if (g.type === 'collect') return 'Collect ' + g.n + ' ' + COLOR_GLYPH_NAMES[g.color];
@@ -334,56 +349,30 @@ export function initUI(deps) {
     });
   };
 
-  ui.resolveCloudConflict = (theirs, mine) => {
-    const body = el('div');
-    body.appendChild(el('p', null, 'Your cloud save and this device disagree. Both copies are kept; choose which one to continue with.'));
-    const dl = el('dl', 'facts');
-    const row = (k, a, b) => {
-      const d = el('div');
-      const dt = el('dt', null, k);
-      const dd = el('dd', null, 'device: ' + a + ' · cloud: ' + b);
-      d.appendChild(dt);
-      d.appendChild(dd);
-      dl.appendChild(d);
-    };
-    const stars = (p) => Object.values(p.journeyStars || {}).reduce((n, s) => n + s, 0);
-    row('Journey stars', stars(mine), stars(theirs));
-    row('Mastery XP', mine.masteryXp || 0, theirs.masteryXp || 0);
-    row('Saved', (mine._savedAt || 'never').slice(0, 16), (theirs._savedAt || 'never').slice(0, 16));
-    body.appendChild(dl);
-    modal({
-      title: 'Save conflict',
-      body,
-      actions: [
-        { label: 'Keep device', value: 'local', primary: true },
-        { label: 'Use cloud', value: 'cloud' },
-      ],
-    }).then((v) => {
-      if (v === 'cloud') {
-        // Preserve the losing snapshot locally before adopting the cloud doc.
-        try {
-          window.localStorage.setItem('jewelcascade.progress-backup', JSON.stringify({ at: new Date().toISOString(), doc: mine }));
-        } catch {
-          /* best effort */
-        }
-        for (const k of Object.keys(mine)) delete mine[k];
-        Object.assign(mine, theirs);
-        storage.saveProgress(mine);
-        refreshMetaScreens();
-        toast('Cloud save applied.', 'ok');
-      } else {
-        try {
-          window.localStorage.setItem('jewelcascade.progress-backup', JSON.stringify({ at: new Date().toISOString(), doc: theirs }));
-        } catch {
-          /* best effort */
-        }
-      }
-    });
-  };
-
   ui.syncChanged = () => {
     refreshTitle();
     if (currentScreen === 'profile') refreshProfile();
+  };
+
+  // StarHermit account: invite link + sign-in on the title screen.
+  const inviteBtn = $('btn-invite');
+  if (inviteBtn) {
+    inviteBtn.textContent = SH.invite;
+    inviteBtn.addEventListener('click', () => {
+      const link = platform.inviteLink && platform.inviteLink();
+      if (!link) return;
+      const done = (ok) => toast(ok ? SH.copied : SH.copyFailed.replace('{link}', link), ok ? 'ok' : null);
+      try { navigator.clipboard.writeText(link).then(() => done(true), () => done(false)); } catch { done(false); }
+    });
+  }
+  const signInBtn = $('btn-signin');
+  if (signInBtn) {
+    signInBtn.textContent = SH.signIn;
+    signInBtn.addEventListener('click', () => platform.signIn());
+  }
+  platform.onAuthChange = (signedIn) => {
+    if (!signedIn) toast(SH.signedOut);
+    ui.syncChanged();
   };
 
   ui.cloudApplied = () => {
@@ -411,6 +400,10 @@ export function initUI(deps) {
     $('chip-journey-sub').textContent = 'Stage ' + nextStage + ' of ' + total + ' · ' + stars + '★';
     const level = masteryLevelForXp(progress.masteryXp || 0);
     $('chip-profile-sub').textContent = playerName() + ' · mastery ' + level + (platform.hosted ? ' · ' + syncLabel() : '');
+    const inv = $('btn-invite');
+    if (inv) inv.hidden = !platform.hosted;
+    const sin = $('btn-signin');
+    if (sin) sin.hidden = !(platform.canSignIn && platform.canSignIn());
     refreshDailyChip();
   }
 
@@ -566,7 +559,7 @@ export function initUI(deps) {
       li.appendChild(item);
       list.appendChild(li);
       host.appendChild(list);
-      const note = el('p', 'dim', 'One shared seed per UTC day. Ranked when connected; validated by replay. Next board in ' + dailyCountdown() + '.');
+      const note = el('p', 'dim', 'One shared seed per UTC day; your best is kept. Next board in ' + dailyCountdown() + '.');
       host.appendChild(note);
       pick(c);
       return;
@@ -648,7 +641,7 @@ export function initUI(deps) {
       row.appendChild(randBtn);
       row.appendChild(todayBtn);
       host.appendChild(row);
-      host.appendChild(el('p', 'dim', 'Share a seed with a friend to chase the same board. Fixed ruleset; scores are replay-validated when connected.'));
+      host.appendChild(el('p', 'dim', 'Share a seed with a friend to chase the same board. Fixed ruleset: the same seed and moves always give the same score.'));
       return;
     }
   }
@@ -668,7 +661,7 @@ export function initUI(deps) {
     assists.push(c.assists.hints ? 'hints' : 'no hints');
     if (settings.access.timingAssist && c.timeLimitSec) assists.push('timing assist ×1.5');
     $('setup-assists').textContent = assists.join(', ');
-    $('setup-ranked').textContent = c.ranked ? (!platform.online ? 'Ranked (recorded locally)' : platform.hosted ? 'Ranked (personal bests)' : 'Ranked (replay-validated)') : 'Casual';
+    $('setup-ranked').textContent = c.ranked ? (platform.hosted ? 'Ranked (personal bests)' : 'Ranked (recorded locally)') : 'Casual';
     const goals = $('setup-goals');
     goals.innerHTML = '';
     if (c.kind === 'lesson') {
@@ -1236,20 +1229,9 @@ export function initUI(deps) {
     const mine = boards.entries.filter((e) => e.contentId === r.contentId);
     const best = mine.reduce((m, e) => Math.max(m, e.score), 0);
     const isBest = r.score >= best && r.score > 0;
-    let text = isBest && r.score > 0 ? 'New personal best on this board!' : 'Personal best on this board: ' + fmtInt(best) + '.';
+    const text = isBest && r.score > 0 ? 'New personal best on this board!' : 'Personal best on this board: ' + fmtInt(best) + '.';
     if (isBest && r.score > 0) audio.uiSound('record');
     cmp.textContent = text;
-    if (r.ranked && platform.online && !platform.hosted) {
-      platform
-        .fetchBoards({ board: r.mode === 'daily' ? 'daily' : 'global', contentId: r.contentId, dayKey: r.mode === 'daily' ? r.contentId.slice(6) : undefined, limit: 50 })
-        .then((res) => {
-          if (!res || !res.entries) return;
-          const rank = res.entries.findIndex((e) => e.roundId === r.roundId);
-          if (rank >= 0) cmp.textContent = text + ' Ranked #' + (rank + 1) + ' on the ' + (res.label || 'server') + ' board.';
-          else if (res.entries.length) cmp.textContent = text + ' ' + res.entries.length + ' entries on the board.';
-        })
-        .catch(() => {});
-    }
   }
 
   function recordLocalBoardEntry(r) {
@@ -1534,7 +1516,22 @@ export function initUI(deps) {
 
   /* ============ keyboard + gamepad input ============ */
 
-  const keyMap = { ...DEFAULT_KEYBOARD, ...(settings.input.keyboardMap || {}) };
+  // action -> KeyboardEvent.code(s). Local remaps first; when signed in, the
+  // StarHermit controls (StarHermit.loadBindings) override them.
+  const keyMap = { ...DEFAULT_KEYBOARD };
+  for (const [a, k] of Object.entries(settings.input.keyboardMap || {})) {
+    const c = Array.isArray(k) ? k.map(toCode).filter(Boolean) : toCode(k);
+    if (a in DEFAULT_KEYBOARD && c && (!Array.isArray(c) || c.length)) keyMap[a] = c;
+  }
+  if (platform.loadBindings) {
+    const asArrays = {};
+    for (const a of Object.keys(keyMap)) asArrays[a] = [].concat(keyMap[a]);
+    platform.loadBindings(asArrays).then((b) => {
+      for (const a of Object.keys(b)) if (a in keyMap) keyMap[a] = b[a].length === 1 ? b[a][0] : b[a];
+      buildRemapLists();
+      refreshHelp();
+    }).catch(() => {});
+  }
   const padMap = { ...DEFAULT_GAMEPAD, ...(settings.input.gamepadMap || {}) };
 
   function isTyping() {
@@ -1554,7 +1551,7 @@ export function initUI(deps) {
 
   function bindingFor(code) {
     for (const action of Object.keys(keyMap)) {
-      if (keyMap[action] === code) return action;
+      if ([].concat(keyMap[action]).includes(code)) return action;
     }
     return null;
   }
@@ -1570,8 +1567,8 @@ export function initUI(deps) {
       return;
     }
     const inGame = currentScreen === 'game';
-    const action = bindingFor(e.key);
-    if (action === 'help' || (e.key === '?' && e.shiftKey)) {
+    const action = bindingFor(e.code);
+    if (action === 'help') {
       e.preventDefault();
       refreshHelp();
       if (inGame) {
@@ -1742,8 +1739,14 @@ export function initUI(deps) {
     audio.setMuted(settings.audio.muted);
   });
 
+  let kvTimer = 0;
   function settingsChanged(key) {
     storage.saveSettings(settings);
+    // Mirror preferences to the StarHermit per-player settings KV (debounced).
+    if (platform.hosted && platform.patchSettings) {
+      clearTimeout(kvTimer);
+      kvTimer = setTimeout(() => platform.patchSettings(settings), 600);
+    }
     analytics.track('settings_change', { key });
     audio.uiSound('saved');
   }
@@ -1831,6 +1834,7 @@ export function initUI(deps) {
     settings.input.keyboardMap = null;
     settings.input.gamepadMap = null;
     settingsChanged('input.bindings');
+    if (platform.resetControls) platform.resetControls().catch(() => {});
     buildRemapLists();
   });
   $('btn-wipe').addEventListener('click', () => {
@@ -1890,10 +1894,20 @@ export function initUI(deps) {
       if (!rebinding || rebinding.kind !== 'keyboard') return;
       e.preventDefault();
       e.stopPropagation();
-      if (e.key !== 'Escape') {
-        keyMap[rebinding.action] = e.key;
+      if (e.code !== 'Escape' && e.code) {
+        // Each code belongs to exactly one action: drop it from any other action first.
+        for (const a of Object.keys(keyMap)) {
+          if (a === rebinding.action) continue;
+          const before = [].concat(keyMap[a]);
+          const rest = before.filter((c) => c !== e.code);
+          if (rest.length === before.length) continue;
+          keyMap[a] = rest.length === 1 ? rest[0] : rest.length ? rest : '';
+          if (platform.setControl && rest.length) platform.setControl(a, rest);
+        }
+        keyMap[rebinding.action] = e.code;
         settings.input.keyboardMap = { ...keyMap };
         settingsChanged('input.bindings');
+        if (platform.setControl) platform.setControl(rebinding.action, [e.code]);
       }
       rebinding = null;
       buildRemapLists();
@@ -1940,7 +1954,7 @@ export function initUI(deps) {
         b: keyLabel(keyMap.hint) + ' hint · ' + keyLabel(keyMap.undo) + ' undo (practice) · ' + keyLabel(keyMap.skip) + ' skip animation · ' + keyLabel(keyMap.camera) + ' camera · ' + keyLabel(keyMap.mute) + ' mute · ' + keyLabel(keyMap.pause) + ' pause. Gamepad: A select, B cancel, X hint, Y undo, start pause. Rebind everything in Settings → Controls.',
       },
       { t: 'Stars & mastery', b: 'Finish goals for ★, beat score thresholds for ★★ and ★★★. Every round earns mastery XP toward cosmetic themes, trails, frames, and titles — looks only, never power.' },
-      { t: 'Fair play', b: 'Ranked boards are replay-validated: the same seed and the same moves always produce the same score. Daily seeds never change once published.' },
+      { t: 'Fair play', b: 'Scoring is deterministic: the same seed and the same moves always produce the same score. Daily seeds never change once published.' },
     ];
     for (const c of cards) {
       const card = el('article', 'help-card');
@@ -1995,7 +2009,7 @@ export function initUI(deps) {
         host.innerHTML = '';
         const entries = (res && res.entries) || [];
         if (!entries.length) {
-          host.appendChild(el('p', 'dim', platform.online ? 'No entries yet — be the first.' : 'Offline. Personal bests:'));
+          host.appendChild(el('p', 'dim', platform.online ? 'No entries yet — be the first.' : 'Personal bests on this device:'));
         } else {
           host.appendChild(renderBoardTable(entries, !!(res && res.validated), res && res.label));
         }
@@ -2065,7 +2079,14 @@ export function initUI(deps) {
   function refreshProfile() {
     const name = playerName();
     $('prof-name').textContent = name;
-    $('prof-avatar').textContent = name.slice(0, 1).toUpperCase();
+    const av = $('prof-avatar');
+    if (platform.hosted && platform.avatarUrl) {
+      av.textContent = '';
+      const img = el('img', 'avatar-img');
+      img.src = platform.avatarUrl;
+      img.alt = '';
+      av.appendChild(img);
+    } else av.textContent = name.slice(0, 1).toUpperCase();
     $('prof-title-line').textContent = cosmeticName('title', settings.cosmetics.title);
     const syncEl = $('prof-sync');
     if (platform.hosted) {

@@ -18,7 +18,7 @@ import { reviveContent } from './engine/content.js';
 import { JewelScene } from './render/scene.js';
 import { initUI } from './ui/ui.js';
 import { AudioEngine } from './audio.js';
-import { Platform } from './platform.js?v=production-qa-1';
+import { Platform } from './platform.js?v=sh-1';
 import { Analytics } from './analytics.js';
 
 const errors = [];
@@ -57,11 +57,25 @@ async function boot() {
   const platform = new Platform();
   const analytics = new Analytics({ platform, settings });
   try {
-    await platform.init({ analytics });
+    await platform.init();
   } catch (err) {
     console.warn('[boot] platform init failed, continuing offline', err);
   }
   if (platform.hosted) platform.syncTime().catch(() => {});
+  // StarHermit per-player settings KV wins over the local copy when signed in.
+  if (platform.hosted) {
+    try {
+      const remote = await platform.getSettings();
+      for (const [k, v] of Object.entries(remote || {})) {
+        if (!(k in settings)) continue;
+        if (v && typeof v === 'object' && !Array.isArray(v) && settings[k] && typeof settings[k] === 'object') Object.assign(settings[k], v);
+        else settings[k] = v;
+      }
+      storage.saveSettings(settings);
+    } catch {
+      /* keep local settings */
+    }
+  }
 
   const session = new GameSession({ settings, progress, platform, analytics });
 
@@ -115,7 +129,6 @@ async function boot() {
   session.on('round', () => {
     if (scene) scene.buildBoard(session.state);
     // The 'start' funnel event is emitted by the session (its single owner).
-    platform.startActivity();
   });
   session.on('rules', ({ events, state, fast }) => {
     if (audio) audio.handleRulesEvents(events, state);
@@ -149,8 +162,7 @@ async function boot() {
   });
   session.on('results', (r) => {
     if (audio) audio.uiSound(r.won ? 'win' : 'lose');
-    platform.endActivity();
-    if (platform.hosted && platform.queueCloudSave) platform.queueCloudSave(progress);
+    if (platform.hosted) platform.queueCloudSave(progress);
   });
 
   /* ---------------- ui ---------------- */
@@ -213,33 +225,11 @@ async function boot() {
   // Adaptive resolution lives in the renderer (scene._adapt), driven by the
   // graphics settings' `adaptive` flag.
 
-  /* ---------------- presence + cloud save ---------------- */
-  setInterval(() => {
-    if (session.status === 'active' || session.status === 'resolving') {
-      platform.presencePing({ status: 'playing', mode: session.mode });
-    }
-  }, 30000);
-  // Hosted: debounced mirror to the platform cloud slot (queueCloudSave).
-  // Dev server: immediate POST /save with conflict surfacing.
-  function pushCloud() {
-    if (platform.hosted) {
-      if (platform.queueCloudSave) platform.queueCloudSave(progress);
-      return;
-    }
-    if (!platform.cloudSave) return;
-    progress._savedAt = new Date().toISOString();
-    platform.cloudSave(progress).then((res) => {
-      if (res && res.conflict && ui && ui.resolveCloudConflict) {
-        ui.resolveCloudConflict(res.theirs, progress);
-      }
-    }).catch(() => {});
-  }
-  setInterval(pushCloud, 60000);
+  /* ---------------- cloud save (hosted only) ---------------- */
+  // Debounced mirror to the platform cloud slot (queueCloudSave); flushed on pagehide.
   window.addEventListener('pagehide', () => {
-    platform.endActivity();
     session.saveSnapshot();
-    if (platform.hosted && platform.flushCloudSave) platform.flushCloudSave();
-    else pushCloud();
+    if (platform.hosted) platform.flushCloudSave();
   });
   if (platform.hosted && platform.cloudLoad) {
     // Remote-preferred load: a strictly newer cloud doc wins (local copy is

@@ -414,9 +414,6 @@ export class GameSession {
         ms: results.elapsedMs,
       });
     }
-    if (this.platform && results.ranked) {
-      this.platform.submitScore(results).catch(() => {});
-    }
   }
 
   /** Fold results into persisted progression; returns a summary for UI. */
