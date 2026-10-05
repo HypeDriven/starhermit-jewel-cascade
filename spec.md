@@ -330,7 +330,14 @@ while `body.in-game`.
 **Mobile portrait** (≤1023 px): one column. Both rails become absolutely positioned drawers opened
 by edge tabs, and a five-button thumb tray (hint / undo / mirror / pause) pins to the bottom.
 **Mobile landscape** (≤1023 px and ≤560 px tall): the status bar rotates into a 9.5 rem vertical
-rail beside the playfield and the drawer tabs move to the vertical edges.
+rail beside the playfield and the drawer tabs move to the vertical edges. A closed drawer's
+buttons take no pointer events, so they never catch taps meant for the drawer tab or the board.
+
+**Large screens.** `ui-scale.js` sets `--ui-scale` (1 up to a 1600×1000 viewport, then
+`min(w/1600, h/1000)` capped at 2.5) and `#ui-root` plus the fps meter are CSS-`zoom`ed by it, with
+every vw/vh/vmin length in the stylesheet divided by it; the full-viewport canvas is not zoomed, and
+`ui.updateInsets()` multiplies the measured rail/status sizes by `UIScale.value` so the camera still
+frames the board between the (larger) rails.
 
 **Safe areas.** `viewport-fit=cover`; `--sat/--sar/--sab/--sal` from `env(safe-area-inset-*)` are
 applied to the header, every screen's padding, the game grid, the tutorial banner, the mirror

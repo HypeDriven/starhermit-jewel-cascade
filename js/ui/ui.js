@@ -2184,16 +2184,19 @@ export function initUI(deps) {
     const status = $('hud-status-bar');
     const tray = $('thumb-tray');
     const insets = { left: 0, right: 0, top: 0, bottom: 0 };
+    // #ui-root is CSS-zoomed by UIScale.value on large screens: offset sizes
+    // are layout px, the canvas safe rect is in viewport px.
+    const z = (window.UIScale && window.UIScale.value) || 1;
     if (currentScreen === 'game') {
       if (wide) {
-        insets.left = leftRail.offsetWidth + 16;
-        insets.right = rightRail.offsetWidth + 16;
+        insets.left = (leftRail.offsetWidth + 16) * z;
+        insets.right = (rightRail.offsetWidth + 16) * z;
       }
       // the status HUD is a top bar, or a side column in short landscape
-      if (status.offsetHeight > status.offsetWidth) insets.left = Math.max(insets.left, status.offsetWidth + 8);
-      else insets.top = status.offsetHeight + 8;
+      if (status.offsetHeight > status.offsetWidth) insets.left = Math.max(insets.left, (status.offsetWidth + 8) * z);
+      else insets.top = (status.offsetHeight + 8) * z;
       if (!wide && window.innerHeight > window.innerWidth) {
-        insets.bottom = tray.offsetHeight + 8;
+        insets.bottom = (tray.offsetHeight + 8) * z;
       }
       // The lesson banner is carved out of the board's safe rect: a bottom
       // band normally, a right-hand column when it docks beside the board

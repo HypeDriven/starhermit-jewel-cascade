@@ -166,6 +166,10 @@ input[type="range"] { accent-color: var(--accent); min-height: var(--tap); }
   background: transparent;
 }
 #ui-root { position: absolute; inset: 0; display: flex; flex-direction: column; }
+/* Large screens: the DOM UI layer (and the body-level fps meter) zooms by --ui-scale from
+   ui-scale.js (exactly 1 up to 1600x1000); the full-viewport canvas is not zoomed. Every
+   vw/vh/vmin length in this stylesheet is divided by --ui-scale to compensate. */
+#ui-root, #fps-meter { zoom: var(--ui-scale, 1); }
 
 #app-header {
   display: flex;
@@ -229,7 +233,7 @@ body.in-game #app-header { display: none; }
 }
 .panel { width: min(30rem, 100%); }
 .panel-wide { width: min(56rem, 100%); }
-.overlay-panel { max-height: calc(100vh - 2rem - var(--sat) - var(--sab)); overflow-y: auto; }
+.overlay-panel { max-height: calc(calc(100vh / var(--ui-scale, 1)) - 2rem - var(--sat) - var(--sab)); overflow-y: auto; }
 
 .row-end { display: flex; justify-content: flex-end; gap: var(--gap); margin-top: 1rem; flex-wrap: wrap; }
 .row-wrap { display: flex; gap: var(--gap); flex-wrap: wrap; margin-top: 1rem; }
@@ -255,7 +259,7 @@ body.in-game #app-header { display: none; }
 /* ---------- title ---------- */
 .title-wrap { margin: auto; text-align: center; display: flex; flex-direction: column; align-items: center; gap: 1rem; }
 .game-logo {
-  font-size: clamp(2.6rem, 8vw, 4.5rem);
+  font-size: clamp(2.6rem, calc(8vw / var(--ui-scale, 1)), 4.5rem);
   font-weight: 800;
   letter-spacing: 0.02em;
   color: var(--accent);
@@ -468,7 +472,7 @@ body.in-game #app-header { display: none; }
 
 .rail {
   width: 15rem;
-  max-width: 32vw;
+  max-width: calc(32vw / var(--ui-scale, 1));
   align-self: start;
   background: linear-gradient(180deg, rgb(49 37 78 / 0.92), rgb(41 30 66 / 0.88));
   border: 1px solid var(--panel-line);
@@ -516,7 +520,7 @@ body.in-game #app-header { display: none; }
 .ready-overlay[hidden] { display: none; } /* display:grid above would otherwise beat [hidden] */
 .tutorial-banner[hidden] { display: none; }
 #ready-text {
-  font-size: clamp(2.2rem, 9vw, 4rem);
+  font-size: clamp(2.2rem, calc(9vw / var(--ui-scale, 1)), 4rem);
   font-weight: 800;
   color: var(--accent-2);
   text-shadow: 0 2px 0 #00000066, 0 0 30px #ffb36b55;
@@ -560,7 +564,7 @@ body.in-game #app-header { display: none; }
   align-items: center;
   justify-content: center;
   font-weight: 800;
-  font-size: clamp(0.6rem, 2.2vmin, 1rem);
+  font-size: clamp(0.6rem, calc(2.2vmin / var(--ui-scale, 1)), 1rem);
   border-radius: 6px;
   border: 1px solid rgb(0 0 0 / 0.4);
   background: var(--bg-2);
@@ -796,9 +800,11 @@ body.in-game #app-header { display: none; }
     transition: transform 0.25s ease, opacity 0.25s ease;
     opacity: 0;
     pointer-events: none !important;
-    max-width: 78vw;
+    max-width: calc(78vw / var(--ui-scale, 1));
   }
   .rail.open { opacity: 1; pointer-events: auto !important; }
+  /* a closed drawer's buttons are invisible: they must not catch taps meant for the drawer tab under them */
+  .rail:not(.open) * { pointer-events: none !important; }
   .rail-objective { inset-inline-start: calc(0.5rem + var(--sal)); transform: translateX(-12px); }
   .rail-objective.open { transform: none; }
   .rail-actions { inset-inline-end: calc(0.5rem + var(--sar)); transform: translateX(12px); width: 12rem; }
@@ -903,9 +909,9 @@ body.no-webgl #btn-mirror-toggle, body.no-webgl #tray-mirror { display: none; }
 
 /* ---- very small heights: compress panels ---- */
 @media (max-height: 480px) {
-  .overlay-panel { max-height: calc(100vh - 0.5rem); }
+  .overlay-panel { max-height: calc(calc(100vh / var(--ui-scale, 1)) - 0.5rem); }
   /* short landscape: compact lesson copy docked bottom-right beside the board */
-  .tutorial-banner { bottom: calc(0.4rem + var(--sab)); padding: 0.4rem 0.7rem; inset-inline: auto calc(0.4rem + var(--sar)); transform: none; width: min(22rem, 42vw); font-size: 0.85rem; }
+  .tutorial-banner { bottom: calc(0.4rem + var(--sab)); padding: 0.4rem 0.7rem; inset-inline: auto calc(0.4rem + var(--sar)); transform: none; width: min(22rem, calc(42vw / var(--ui-scale, 1))); font-size: 0.85rem; }
   .tutorial-banner p { margin-bottom: 0.2rem; }
 }
 body.no-webgl #btn-camera { display: none; }
