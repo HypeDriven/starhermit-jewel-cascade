@@ -205,4 +205,21 @@ export class Platform {
   setControl(action, codes) { return this.hosted ? this.sh.setControl(action, codes).catch(() => null) : Promise.resolve(null); }
   resetControls() { return this.hosted ? this.sh.resetControls() : Promise.resolve(null); }
   inviteLink() { return this.hosted ? this.sh.inviteLink() : null; }
+
+  /**
+   * Post a finished ranked round's score to the platform `high-score` board
+   * (score-script.js). Resolves { posted, rank } — the player's rank on that
+   * board, or null. Standalone → not posted, no request.
+   */
+  async submitScore(score) {
+    if (!this.hosted || typeof this.sh.submitScores !== 'function') return { posted: false, rank: null };
+    let keys = [];
+    try { keys = await this.sh.submitScores({ 'high-score': Math.max(0, Math.round(score)) }); } catch { keys = []; }
+    if (!keys.includes('high-score')) return { posted: false, rank: null };
+    try {
+      const r = await this.sh.leaderboard('high-score', { pageSize: 100 });
+      const me = (r.items || []).find((i) => String(i.userId) === this.userId);
+      return { posted: true, rank: me ? me.rank : null };
+    } catch { return { posted: true, rank: null }; }
+  }
 }

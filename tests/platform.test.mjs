@@ -84,6 +84,14 @@ test('launch token: profile, cloud save game:<slug>, settings, controls, invite'
 
   assert.ok(p.inviteLink().endsWith('/game-invite/user-123456789/gid-1'));
   assert.ok(be.calls.every((c) => c.auth === 'Bearer ' + sdk.token));
+
+  const sent = [];
+  sdk.submitScores = async (sc) => { sent.push(sc); return Object.keys(sc); };
+  sdk.leaderboard = async (key) => ({ items: key === 'high-score' ? [{ userId: 'user-123456789', rank: 7 }] : [] });
+  assert.deepEqual(await p.submitScore(4321), { posted: true, rank: 7 });
+  assert.deepEqual(sent, [{ 'high-score': 4321 }]);
+  sdk.submitScores = async () => [];
+  assert.deepEqual(await p.submitScore(1), { posted: false, rank: null });
   sdk.signOut();
 });
 
@@ -103,6 +111,7 @@ test('standalone: no network calls at all', async () => {
   assert.equal(await p.syncTime(), false);
   assert.deepEqual((await p.fetchBoards({ board: 'global' })).entries, []);
   assert.equal(await p.cloudLoad(), null);
+  assert.deepEqual(await p.submitScore(5000), { posted: false, rank: null });
   assert.deepEqual(urls, []);
 });
 
@@ -112,4 +121,13 @@ test('hosted domain without a token offers sign-in', async () => {
   await p.init();
   assert.equal(p.hosted, false);
   assert.equal(p.canSignIn(), true);
+});
+
+test('leaderboard line strings in every locale', async () => {
+  const { SH_STRINGS } = await import('../js/ui/gfx-i18n.js');
+  assert.equal(Object.keys(SH_STRINGS).length, 9);
+  for (const [l, t] of Object.entries(SH_STRINGS)) {
+    for (const k of ['lbPosting', 'lbRank', 'lbPosted', 'lbNotPosted']) assert.ok(t[k], l + ' ' + k);
+    assert.ok(t.lbRank.includes('{rank}'));
+  }
 });

@@ -42,7 +42,8 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | `js/platform.js` | StarHermit adapter over the SDK (profile/avatar, cloud save, settings KV, controls, invite, read-only board, sign-in) plus signed-in time sync; no network at all standalone |
 | `js/storage.js` | Checksummed, versioned `localStorage` documents |
 | `js/analytics.js` | Consent-gated funnel telemetry (in-memory only; nothing is sent) |
-| `server.js` | Authoritative script: replay verification, boards, saves, static serving |
+| `score-script.js` | StarHermit platform script (`server=`): range-checks a finished ranked round's score and posts it to the `high-score` leaderboard (canonical copy in the games repo's `tools/score-script.js`) |
+| `server.js` | Local dev server: replay verification, boards, saves, static serving |
 | `sfx/` | 37 Opus one-shots + `manifest.txt` (canonical) + `manifest.json` (generator) |
 | `assets/` | Generated key art (`title-keyart.webp`, `results-plate.webp`), `favicon.svg` |
 | `tests/run.mjs` | 61 unit / property / fuzz / golden / server tests |
@@ -549,11 +550,11 @@ truncating, and the mode cards are already sized for two-line titles. See §17.
 ## 12. StarHermit integration
 
 Conventions per <https://wiki.starhermit.com/>. `starhermit.txt` declares `name`, `launch`,
-`owner`, `server=server.js`, `cover=coverart.png`, and the 14 keyboard actions (`control.up=ArrowUp`
+`owner`, `server=score-script.js`, `cover=coverart.png`, and the 14 keyboard actions (`control.up=ArrowUp`
 … `control.help=Slash`, §6). The shared client `js/starhermit-sdk.js` (unmodified copy of
 `tools/starhermit-sdk.js`) loads before `main.js`; the adapter is `js/platform.js`
-whose `init()` calls `StarHermit.init()`. `server.js` is the game's own dev server, not a platform
-script; the client no longer calls any of its routes.
+whose `init()` calls `StarHermit.init()`. The platform runs `score-script.js`; `server.js` is the
+game's own dev server and the client no longer calls any of its routes.
 
 **Hosted (signed in).** The SDK reads the launch token from `#game_token=` (or the
 `#access_token=` sign-in return), strips it from the URL, takes the slug from `game_scope` (never
@@ -569,14 +570,15 @@ out, the cloud status reads offline and play continues locally.
 | Settings KV | `patchSettings` / `getSettings` | Every settings change is mirrored (600 ms debounce); at boot the platform values are merged over the local settings |
 | Controls | `loadBindings`, `setControl`, `resetControls` | Keyboard routing by `event.code`; Settings → Controls remaps persist to the platform (§6) |
 | Invite link | `StarHermit.inviteLink()` | **Invite a friend** on the title (signed in only) copies the link and confirms with a toast |
-| Leaderboards | `StarHermit.leaderboard()` | Read-only first platform board (friends tab with `scope=friends`), user ids resolved to nicknames; no board or the daily tab → local records only |
+| Leaderboards | `StarHermit.leaderboard()` | First platform board (friends tab with `scope=friends`), user ids resolved to nicknames; no board or the daily tab → local records only |
+| Score submit | `StarHermit.submitScores()` | Every finished ranked round (Daily, Challenge, Score chase) posts its score to the `high-score` board (a practice session whose `score-script.js` range-checks it: integer, higher is better, 0–1,000,000); the results screen shows "Posting score…", then "Leaderboard rank: #N" (or posted / not posted). Practice, Learn and Journey post nothing |
 
-Account strings (sign-in, invite, toasts) are localized in the nine locales (`SH_STRINGS` in
+Account strings (sign-in, invite, toasts, leaderboard line) are localized in the nine locales (`SH_STRINGS` in
 `js/ui/gfx-i18n.js`).
 
 **Standalone (no launch token) makes no network request.** No `/api` or `/ws` route is called:
 local clock, boards = personal bests in `localStorage`, achievements and progress local, no
-activity/presence/telemetry. Ranked rounds are recorded locally.
+activity/presence/telemetry, no leaderboard line. Ranked rounds are recorded locally.
 
 **`server.js` (dev server, not called by the client).** It still implements replay-validated
 `POST /scores`, `GET /boards`, `POST/GET /save`, `GET /identity`, `GET /profile`, `POST /activity`,
@@ -593,9 +595,9 @@ Practice, Learn and Journey are not ranked and cannot be submitted. Idempotency 
 entries never expose identity or tie-break keys. Rate limits are per identity *and* per route.
 
 **Not used.** No platform achievements (the five achievements are local only, part of the
-cloud-saved doc) — `server.js` is not a platform script, so platform sessions, matchmaking,
-session invites, chat and replays have nothing to drive them; clients can never submit scores to
-a platform leaderboard — hosted ranked rounds are recorded as personal bests; no realtime or
+cloud-saved doc); matchmaking, session invites, chat and replays have nothing to drive them (the
+only platform session is the score post's practice session); the platform board trusts the
+client's score within its range (the replay check lives only in `server.js`); no realtime or
 voice — the game is single-player with asynchronous comparison. `GET /api/v1/daily` is served
 but the client has no caller for it.
 

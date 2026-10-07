@@ -1125,6 +1125,21 @@ export function initUI(deps) {
 
   /* ============ results ============ */
 
+  // Signed in only: post a ranked round's score and show the platform board rank.
+  let lbSeq = 0;
+  function postToLeaderboard(r) {
+    const line = $('res-lb');
+    const seq = ++lbSeq;
+    if (!r.ranked || !platform.hosted || typeof platform.submitScore !== 'function') { line.hidden = true; return; }
+    line.hidden = false;
+    line.textContent = SH.lbPosting;
+    platform.submitScore(r.score).then((res) => {
+      if (seq !== lbSeq) return;
+      line.textContent = !res.posted ? SH.lbNotPosted
+        : res.rank ? SH.lbRank.replace('{rank}', res.rank) : SH.lbPosted;
+    });
+  }
+
   session.on('results', (r) => {
     recordLocalBoardEntry(r);
     $('res-h').textContent = REASON_HEADLINES[r.reason] || 'Round over';
@@ -1135,6 +1150,7 @@ export function initUI(deps) {
     }
     $('res-score').textContent = fmtInt(r.score);
     $('res-ranked').hidden = !r.ranked;
+    postToLeaderboard(r);
 
     const tbody = $('res-breakdown-body');
     tbody.innerHTML = '';
