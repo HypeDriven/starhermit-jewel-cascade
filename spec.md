@@ -565,7 +565,7 @@ out, the cloud status reads offline and play continues locally.
 | Sign-in | `StarHermit.signIn()` | On `<id>.starhermit.com` without a token the title shows **Sign in with StarHermit**; hidden when signed in and when running locally |
 | Time sync | `GET /api/v1/time` | Signed in only: round-trip-adjusted offset (`serverTime`/`now`/`time`); standalone uses the local clock |
 | Profile | `StarHermit.profile()`, `avatarUrl()` | Nickname (never `/me`, never usernames; `"Player " + id` fallback) on the Profile chip and screen; the avatar replaces the initial on the Profile screen |
-| Cloud save | slot `game:<slug>` via the SDK | Saves debounced 2 s and flushed with keepalive on `pagehide`; remote wins when strictly newer; sync status on the profile chip/screen; `localStorage` stays the offline cache |
+| Cloud save | slot `game:<slug>` via the SDK | Saves debounced 2 s and flushed with keepalive on `pagehide`; the remote doc wins unless the local `_savedAt` (stamped on every progress save, never at boot) is strictly newer; sync status on the profile chip/screen; `localStorage` stays the offline cache |
 | Settings KV | `patchSettings` / `getSettings` | Every settings change is mirrored (600 ms debounce); at boot the platform values are merged over the local settings |
 | Controls | `loadBindings`, `setControl`, `resetControls` | Keyboard routing by `event.code`; Settings → Controls remaps persist to the platform (§6) |
 | Invite link | `StarHermit.inviteLink()` | **Invite a friend** on the title (signed in only) copies the link and confirms with a toast |

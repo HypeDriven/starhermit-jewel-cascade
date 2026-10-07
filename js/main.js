@@ -43,7 +43,6 @@ async function boot() {
   const webglAvailable = detectWebGL();
   const settings = storage.loadSettings();
   const progress = storage.loadProgress();
-  if (!progress._savedAt) progress._savedAt = new Date().toISOString();
 
   // Honor OS reduced-motion until the player overrides it.
   if (settings.motion.reduced === false && !settings.motion._touched) {
@@ -232,17 +231,19 @@ async function boot() {
     if (platform.hosted) platform.flushCloudSave();
   });
   if (platform.hosted && platform.cloudLoad) {
-    // Remote-preferred load: a strictly newer cloud doc wins (local copy is
-    // backed up first); an equal-or-older cloud doc is left for this device
-    // to overwrite with the next queued save.
+    // Remote-preferred load: local progress is pushed only when its last real
+    // save (_savedAt, stamped by saveProgress, never at boot) is strictly newer;
+    // an identical stamp is already in sync; otherwise the cloud doc wins (the
+    // local copy is backed up first), so a fresh or stale device never wins.
     platform.cloudLoad().then((remote) => {
       if (!remote || !remote.doc) return;
       const remoteAt = remote.doc._savedAt || remote.savedAt || '';
       const localAt = progress._savedAt || '';
-      if (localAt >= remoteAt) {
+      if (localAt > remoteAt) {
         platform.queueCloudSave(progress);
         return;
       }
+      if (localAt && localAt === remoteAt) return;
       try {
         window.localStorage.setItem('jewelcascade.progress-backup', JSON.stringify({ at: new Date().toISOString(), doc: progress }));
       } catch {
@@ -250,7 +251,7 @@ async function boot() {
       }
       for (const k of Object.keys(progress)) delete progress[k];
       Object.assign(progress, remote.doc);
-      storage.saveProgress(progress);
+      storage.saveProgress(progress, false);
       if (ui && ui.cloudApplied) ui.cloudApplied();
     }).catch(() => {});
   }

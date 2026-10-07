@@ -188,8 +188,11 @@ export function loadProgress() {
   };
 }
 
-export function saveProgress(progress) {
+// `_savedAt` stamps every real progress write; the signed-in start-up compare
+// uses it, so adopting a cloud doc passes touch=false to keep the remote stamp.
+export function saveProgress(progress, touch = true) {
   progress.version = PROGRESS_VERSION;
+  if (touch) progress._savedAt = new Date().toISOString();
   return write('progress', progress, PROGRESS_VERSION);
 }
 
