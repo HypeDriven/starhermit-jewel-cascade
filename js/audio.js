@@ -88,7 +88,7 @@ class VoicePool {
   constructor(ctx, destination, size, type) {
     this.voices = [];
     for (let i = 0; i < size; i++) {
-      const osc = ctx.createOscillator();
+      const osc = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createOscillator(), null) : ctx.createOscillator());
       osc.type = type;
       osc.frequency.value = 0;
       const filter = ctx.createBiquadFilter();
@@ -299,7 +299,7 @@ export class AudioEngine {
     if (!this._audible()) return;
     const ctx = this.ctx;
     const t = ctx.currentTime + at;
-    const src = ctx.createBufferSource();
+    const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createBufferSource(), null) : ctx.createBufferSource());
     src.buffer = this.noiseBuffer;
     src.loop = true;
     const f = ctx.createBiquadFilter();
@@ -341,7 +341,7 @@ export class AudioEngine {
     if (buf) {
       if (!this._audible()) return false;
       try {
-        const src = this.ctx.createBufferSource();
+        const src = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(this.ctx.createBufferSource(), name) : this.ctx.createBufferSource());
         src.buffer = buf;
         src.connect(this.buses.effects);
         src.start();
@@ -677,11 +677,11 @@ export class AudioEngine {
     const ctx = this.ctx;
     const root = AMBIENCE_ROOTS[key];
     const t = ctx.currentTime;
-    const oscA = ctx.createOscillator();
+    const oscA = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createOscillator(), key) : ctx.createOscillator());
     oscA.type = 'sine';
     oscA.frequency.value = root;
     oscA.detune.value = -4;
-    const oscB = ctx.createOscillator();
+    const oscB = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createOscillator(), key) : ctx.createOscillator());
     oscB.type = 'sine';
     oscB.frequency.value = root * 1.5; // fifth above
     oscB.detune.value = 4;
@@ -692,7 +692,7 @@ export class AudioEngine {
     const gain = ctx.createGain();
     gain.gain.setValueAtTime(0, t);
     gain.gain.setTargetAtTime(PAD_GAIN, t, 1.2); // slow fade-in
-    const lfo = ctx.createOscillator();
+    const lfo = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createOscillator(), key) : ctx.createOscillator());
     lfo.type = 'sine';
     lfo.frequency.value = 0.09;
     const lfoGain = ctx.createGain();
@@ -807,7 +807,7 @@ export class AudioEngine {
     const ctx = this.ctx;
     if (!ctx) return;
     const t = ctx.currentTime + Math.max(0, at);
-    const osc = ctx.createOscillator();
+    const osc = (globalThis.GameOptions ? globalThis.GameOptions.trackSource(ctx.createOscillator(), null) : ctx.createOscillator());
     osc.type = 'triangle';
     osc.frequency.value = freq;
     const g = ctx.createGain();

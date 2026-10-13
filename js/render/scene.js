@@ -2334,7 +2334,7 @@ export class JewelScene {
     }
     if (this.composer) {
       try {
-        this.composer.render(dt);
+        (globalThis.GameOptions ? globalThis.GameOptions.draw(this.composer.renderer, () => this.composer.render(dt)) : this.composer.render(dt));
         return;
       } catch {
         this.postFailed = true;
@@ -2342,7 +2342,7 @@ export class JewelScene {
         this.canvas.dataset.gfxPost = 'off';
       }
     }
-    this.renderer.render(this.scene, this.camera);
+    (globalThis.GameOptions ? globalThis.GameOptions.draw(this.renderer, () => this.renderer.render(this.scene, this.camera)) : this.renderer.render(this.scene, this.camera));
   }
 
   _update(now, dt) {
