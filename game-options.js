@@ -546,6 +546,8 @@
         panel.mode.options[0].textContent = t[10]; panel.mode.options[1].textContent = t[8];
         panel.sounds.options[4].textContent = t[8];
         panel.reportHeading.textContent = t[14]; panel.reportSend.textContent = t[17];
+        // A finished report's status line is in the old language; clear it rather than mix languages.
+        const reportStatus = panel.report.querySelector('[data-game-report="status"]'); if (reportStatus && !panel.reportSend.disabled) reportStatus.textContent = '';
         for (const node of panel.report.querySelectorAll('[data-game-options-label]')) node.firstElementChild.textContent = t[Number(node.dataset.gameOptionsLabel)];
       }
       panel.report.hidden = !(sdk?.signedIn && typeof sdk.reportBug === 'function');
