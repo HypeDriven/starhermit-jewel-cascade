@@ -1,7 +1,7 @@
 /**
  * gfx-i18n.js — strings for the Graphics settings section in every required
- * locale. The rest of the game ships English only (spec §10); this panel picks
- * its locale from navigator.language.
+ * locale. The panel follows the game language (js/i18n.js); pickLocale maps a
+ * game locale onto these tables.
  */
 
 const en = {

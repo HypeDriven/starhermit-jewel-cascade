@@ -256,6 +256,18 @@ async function boot() {
     }).catch(() => {});
   }
 
+  if (platform.hosted) {
+    // Save conflict: merge the newer cloud copy into local progress (nothing
+    // earned on either side is lost — storage.mergeProgress), keep it locally
+    // and save the merged document again.
+    platform.onConflict = (remoteDoc) => {
+      storage.mergeProgress(progress, remoteDoc);
+      storage.saveProgress(progress, true);
+      platform.queueCloudSave(progress);
+      if (ui && ui.cloudApplied) ui.cloudApplied();
+    };
+  }
+
   /* ---------------- resume offer ---------------- */
   const snap = storage.loadRoundSnapshot();
   if (snap && snap.stateJson && ui && ui.offerResume) {

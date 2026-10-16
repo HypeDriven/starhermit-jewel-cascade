@@ -13,43 +13,50 @@
  */
 
 import * as rules from '../engine/rules.js';
-import { SPECIAL_NAMES, SPECIAL } from '../engine/rules.js';
+import { SPECIAL } from '../engine/rules.js';
 import * as content from '../engine/content.js';
 import { ACHIEVEMENTS, MASTERY_LEVELS, masteryLevelForXp } from '../engine/achievements.js';
 import { THEMES } from '../engine/themes.js';
 import { initGraphicsPanel } from './gfx-panel.js';
 import { SH_STRINGS, pickLocale } from './gfx-i18n.js';
 
-/** StarHermit account strings for the player's locale. */
-const SH = SH_STRINGS[pickLocale(typeof navigator !== 'undefined' ? navigator.language : 'en-US')] || SH_STRINGS['en-US'];
+// Localization (js/i18n.js, a classic script loaded before this module):
+// T() translates now; L() is a deferred message that bound nodes re-render
+// when the game language changes.
+const I18N = window.JCI18N;
+const T = I18N.T, L = I18N.L, bindText = I18N.bindText;
+
+/** StarHermit account strings in the game language (read at use time). */
+const SH = new Proxy({}, { get: (_, k) => (SH_STRINGS[pickLocale(I18N.lang)] || SH_STRINGS['en-US'])[k] });
 
 /* ------------------------------------------------------------------ *
  *  Constants
  * ------------------------------------------------------------------ */
 
 const COLOR_GLYPHS = ['R', 'A', 'T', 'E', 'S', 'M', 'O']; // mirror letters
-const COLOR_GLYPH_NAMES = ['ruby', 'amber', 'topaz', 'emerald', 'sapphire', 'amethyst', 'opal'];
+const SPECIAL_LABELS = [() => '', L('horizontal ray'), L('vertical ray'), L('bloom'), L('prism')]; // by rules SPECIAL index
+const COLOR_GLYPH_NAMES = [L('ruby'), L('amber'), L('topaz'), L('emerald'), L('sapphire'), L('amethyst'), L('opal')];
 const SPECIAL_GLYPHS = { [SPECIAL.RAY_H]: '↔', [SPECIAL.RAY_V]: '↕', [SPECIAL.BLOOM]: '✳', [SPECIAL.PRISM]: '◆' };
 const INVALID_TEXT = {
-  'ended': 'The round is over.',
-  'out-of-bounds': 'That cell is outside the board.',
-  'not-adjacent': 'Jewels must be neighbours to swap.',
-  'no-jewel': 'There is no jewel there.',
-  'crate-cell': 'Crates cannot be moved — match beside them.',
-  'ice-locked': 'That jewel is frozen in ice. Match through it to crack it.',
-  'no-match': 'That swap makes no line of three.',
-  'bad-command': 'That move was not understood.',
-  'duplicate': 'Already done.',
-  'no-undo': 'Nothing to undo.',
-  'not-active': 'Hold on — the board is settling.',
-  'filtered': 'The lesson is guiding a different move.',
+  'ended': L('The round is over.'),
+  'out-of-bounds': L('That cell is outside the board.'),
+  'not-adjacent': L('Jewels must be neighbours to swap.'),
+  'no-jewel': L('There is no jewel there.'),
+  'crate-cell': L('Crates cannot be moved — match beside them.'),
+  'ice-locked': L('That jewel is frozen in ice. Match through it to crack it.'),
+  'no-match': L('That swap makes no line of three.'),
+  'bad-command': L('That move was not understood.'),
+  'duplicate': L('Already done.'),
+  'no-undo': L('Nothing to undo.'),
+  'not-active': L('Hold on — the board is settling.'),
+  'filtered': L('The lesson is guiding a different move.'),
 };
 
 const REASON_HEADLINES = {
-  'goals-complete': 'Commission complete!',
-  'out-of-moves': 'Out of moves',
-  resigned: 'Round resigned',
-  'time-expired': 'Time expired',
+  'goals-complete': L('Commission complete!'),
+  'out-of-moves': L('Out of moves'),
+  resigned: L('Round resigned'),
+  'time-expired': L('Time expired'),
 };
 
 // KeyboardEvent.code per action; mirrors the control.* lines in starhermit.txt.
@@ -88,30 +95,30 @@ const DEFAULT_GAMEPAD = {
 };
 
 const ACTION_LABELS = {
-  up: 'Cursor up',
-  down: 'Cursor down',
-  left: 'Cursor left',
-  right: 'Cursor right',
-  confirm: 'Select / swap',
-  confirm2: 'Select / swap (alt)',
-  cancel: 'Cancel / back',
-  pause: 'Pause',
-  hint: 'Hint',
-  undo: 'Undo',
-  skip: 'Skip animation',
-  camera: 'Camera preset',
-  mute: 'Mute',
-  help: 'Help',
+  up: L('Cursor up'),
+  down: L('Cursor down'),
+  left: L('Cursor left'),
+  right: L('Cursor right'),
+  confirm: L('Select / swap'),
+  confirm2: L('Select / swap (alt)'),
+  cancel: L('Cancel / back'),
+  pause: L('Pause'),
+  hint: L('Hint'),
+  undo: L('Undo'),
+  skip: L('Skip animation'),
+  camera: L('Camera preset'),
+  mute: L('Mute'),
+  help: L('Help'),
 };
 const GAMEPAD_ACTIONS = ['confirm', 'cancel', 'hint', 'undo', 'camera', 'pause'];
 
 const COMPONENT_LABELS = {
-  match: 'Matches',
-  cascade: 'Cascade bonuses',
-  special: 'Specials',
-  blocker: 'Blockers cleared',
-  goal: 'Goal bonuses',
-  leftover: 'Unused-move bonus',
+  match: L('Matches'),
+  cascade: L('Cascade bonuses'),
+  special: L('Specials'),
+  blocker: L('Blockers cleared'),
+  goal: L('Goal bonuses'),
+  leftover: L('Unused-move bonus'),
 };
 
 /* ------------------------------------------------------------------ *
@@ -121,14 +128,15 @@ const COMPONENT_LABELS = {
 function $(id) {
   return document.getElementById(id);
 }
+// Text may be a string or a deferred message (function): messages follow the language.
 function el(tag, cls, text) {
   const e = document.createElement(tag);
   if (cls) e.className = cls;
-  if (text !== undefined) e.textContent = text;
+  if (text !== undefined) bindText(e, text);
   return e;
 }
 function fmtInt(n) {
-  return Math.round(n).toLocaleString('en-US');
+  return Math.round(n).toLocaleString(I18N.lang);
 }
 function fmtTime(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000));
@@ -137,21 +145,45 @@ function fmtTime(ms) {
 }
 function keyLabel(code) {
   if (Array.isArray(code)) return code.map(keyLabel).join('/');
-  if (code === 'Space' || code === ' ') return 'Space';
+  if (code === 'Space' || code === ' ') return T('Space');
   if (code === 'Slash' || code === '?') return '?';
-  return String(code).replace(/^Arrow/, '').replace(/^Key/, '').replace(/^Digit/, '');
+  if (code === 'Enter') return T('Enter');
+  if (code === 'Escape') return 'Esc';
+  const arrow = { ArrowUp: '↑', ArrowDown: '↓', ArrowLeft: '←', ArrowRight: '→' }[code];
+  if (arrow) return arrow;
+  return String(code).replace(/^Key/, '').replace(/^Digit/, '');
 }
 function goalText(g) {
-  if (g.type === 'collect') return 'Collect ' + g.n + ' ' + COLOR_GLYPH_NAMES[g.color];
-  if (g.type === 'ice') return 'Break ' + g.n + ' ice';
-  if (g.type === 'crates') return 'Break ' + g.n + ' crates';
-  if (g.type === 'score') return 'Score ' + fmtInt(g.n);
+  if (g.type === 'collect') return T('Collect {n} {color}', { n: g.n, color: COLOR_GLYPH_NAMES[g.color] });
+  if (g.type === 'ice') return T('Break {n} ice', { n: g.n });
+  if (g.type === 'crates') return T('Break {n} crates', { n: g.n });
+  if (g.type === 'score') return T('Score {n}', { n: fmtInt(g.n) });
   return g.type;
 }
 function goalLeftText(g) {
-  if (g.done) return 'done';
-  if (g.type === 'score') return fmtInt(g.left) + ' to go';
-  return g.left + ' left';
+  if (g.done) return T('done');
+  if (g.type === 'score') return T('{n} to go', { n: fmtInt(g.left) });
+  return T('{n} left', { n: g.left });
+}
+/** Content (stage, lesson, challenge…) display name and description: translation keys or composed. */
+function contentName(c) {
+  if (!c || !c.name) return T('Round');
+  const n = String(c.name);
+  let m;
+  if ((m = /^Stage (\d+) — (.+)$/.exec(n))) return T('Stage {n} — {name}', { n: m[1], name: T(m[2]) });
+  if ((m = /^Daily — (.+)$/.exec(n))) return T('Daily — {date}', { date: m[1] });
+  if ((m = /^Practice — (.+)$/.exec(n))) return T('Practice — {level}', { level: T(m[2] || m[1]) });
+  return T(n);
+}
+function contentDesc(c) {
+  if (!c || !c.desc) return '';
+  const d = String(c.desc);
+  const cut = d.indexOf(' Seed: ');
+  const head = cut >= 0 ? d.slice(0, cut) : d;
+  const seed = cut >= 0 ? ' ' + T('Seed: {seed}', { seed: d.slice(cut + 7) }) : '';
+  const m = /^Fixed ruleset, player-chosen seed\. Reach (\d+) points in (\d+) moves; every unused move banks \+(\d+)\.$/.exec(head);
+  const text = m ? T('Fixed ruleset, player-chosen seed. Reach {target} points in {moves} moves; every unused move banks +{bonus}.', { target: m[1], moves: m[2], bonus: m[3] }) : T(head);
+  return text + seed;
 }
 
 /* ------------------------------------------------------------------ *
@@ -173,13 +205,13 @@ export function initUI(deps) {
     (assertive ? srAlert : srLive).textContent = '';
     // Reassign after a tick so screen readers notice repeated text.
     setTimeout(() => {
-      (assertive ? srAlert : srLive).textContent = msg;
+      (assertive ? srAlert : srLive).textContent = I18N.text(msg);
     }, 30);
   }
 
   function toast(msg, kind, silent) {
     const region = $('toast-region');
-    const t = el('div', 'toast' + (kind ? ' toast-' + kind : ''), msg);
+    const t = el('div', 'toast' + (kind ? ' toast-' + kind : ''), msg);   // msg: text or message
     region.appendChild(t);
     while (region.children.length > 3) region.removeChild(region.firstChild);
     if (!silent) audio.uiSound('toast');
@@ -293,7 +325,7 @@ export function initUI(deps) {
       box.setAttribute('aria-modal', 'true');
       const h = el('h2', null, title);
       box.appendChild(h);
-      if (typeof body === 'string') box.appendChild(el('p', null, body));
+      if (typeof body === 'string' || typeof body === 'function') box.appendChild(el('p', null, body));
       else if (body) box.appendChild(body);
       const row = el('div', 'row-end');
       const done = (value) => {
@@ -334,14 +366,14 @@ export function initUI(deps) {
       /* best-effort display */
     }
     const body = el('div');
-    body.appendChild(el('p', null, 'You have an interrupted round:'));
-    body.appendChild(el('p', 'dim', (snap.content && snap.content.name ? snap.content.name : 'Round') + ' — score ' + fmtInt(score) + ', ' + moves + ' moves left.'));
+    body.appendChild(el('p', null, L('You have an interrupted round:')));
+    body.appendChild(el('p', 'dim', () => T('{name} — score {score}, {moves} moves left.', { name: contentName(snap.content), score: fmtInt(score), moves })));
     modal({
-      title: 'Resume round?',
+      title: L('Resume round?'),
       body,
       actions: [
-        { label: 'Resume', value: 'resume', primary: true },
-        { label: 'Discard', value: 'discard' },
+        { label: L('Resume'), value: 'resume', primary: true },
+        { label: L('Discard'), value: 'discard' },
       ],
     }).then((v) => {
       if (v === 'resume') cb();
@@ -357,27 +389,27 @@ export function initUI(deps) {
   // StarHermit account: invite link + sign-in on the title screen.
   const inviteBtn = $('btn-invite');
   if (inviteBtn) {
-    inviteBtn.textContent = SH.invite;
+    bindText(inviteBtn, () => SH.invite);
     inviteBtn.addEventListener('click', () => {
       const link = platform.inviteLink && platform.inviteLink();
       if (!link) return;
-      const done = (ok) => toast(ok ? SH.copied : SH.copyFailed.replace('{link}', link), ok ? 'ok' : null);
+      const done = (ok) => toast(ok ? () => SH.copied : () => SH.copyFailed.replace('{link}', link), ok ? 'ok' : null);
       try { navigator.clipboard.writeText(link).then(() => done(true), () => done(false)); } catch { done(false); }
     });
   }
   const signInBtn = $('btn-signin');
   if (signInBtn) {
-    signInBtn.textContent = SH.signIn;
+    bindText(signInBtn, () => SH.signIn);
     signInBtn.addEventListener('click', () => platform.signIn());
   }
   platform.onAuthChange = (signedIn) => {
-    if (!signedIn) toast(SH.signedOut);
+    if (!signedIn) toast(() => SH.signedOut);
     ui.syncChanged();
   };
 
   ui.cloudApplied = () => {
     refreshMetaScreens();
-    toast('Cloud save applied.', 'ok');
+    toast(L('Cloud save applied.'), 'ok');
   };
 
   /* ============ title / chips ============ */
@@ -385,21 +417,23 @@ export function initUI(deps) {
   // Hosted shows the platform nickname; offline/dev shows the local editable
   // display name. Never a username.
   function playerName() {
-    return platform.hosted && platform.profile && platform.profile.displayName ? platform.profile.displayName : settings.player.displayName || 'Guest';
+    if (platform.hosted && platform.profile && platform.profile.displayName) return platform.profile.displayName;
+    const n = settings.player.displayName;
+    return !n || n === 'Guest' ? T('Guest') : n; // 'Guest' is the stored default; shown translated
   }
 
-  const SYNC_LABELS = { offline: 'cloud: offline', saving: 'cloud: saving…', synced: 'cloud: synced', error: 'cloud: sync error' };
+  const SYNC_LABELS = { offline: L('cloud: offline'), saving: L('cloud: saving…'), synced: L('cloud: synced'), error: L('cloud: sync error') };
   function syncLabel() {
-    return SYNC_LABELS[platform.syncState] || '';
+    return SYNC_LABELS[platform.syncState] ? SYNC_LABELS[platform.syncState]() : '';
   }
 
   function refreshTitle() {
     const total = content.JOURNEY.length;
     const stars = Object.values(progress.journeyStars || {}).reduce((n, s) => n + s, 0);
     const nextStage = Math.min(progress.journeyUnlocked || 1, total);
-    $('chip-journey-sub').textContent = 'Stage ' + nextStage + ' of ' + total + ' · ' + stars + '★';
+    bindText($('chip-journey-sub'), L('Stage {n} of {total} · {stars}★', { n: nextStage, total, stars }));
     const level = masteryLevelForXp(progress.masteryXp || 0);
-    $('chip-profile-sub').textContent = playerName() + ' · mastery ' + level + (platform.hosted ? ' · ' + syncLabel() : '');
+    bindText($('chip-profile-sub'), () => T('{name} · mastery {level}', { name: playerName(), level }) + (platform.hosted ? ' · ' + syncLabel() : ''));
     const inv = $('btn-invite');
     if (inv) inv.hidden = !platform.hosted;
     const sin = $('btn-signin');
@@ -410,7 +444,7 @@ export function initUI(deps) {
   function refreshDailyChip() {
     const key = content.dayKeyFor(platform.now());
     const best = (progress.daily.best || {})[key];
-    $('chip-daily-sub').textContent = (best ? 'Best ' + fmtInt(best) + ' · ' : '') + 'new board in ' + dailyCountdown();
+    bindText($('chip-daily-sub'), (best ? T('Best {score}', { score: fmtInt(best) }) + ' · ' : '') + T('new board in {time}', { time: dailyCountdown() }));
   }
 
   function dailyCountdown() {
@@ -503,7 +537,7 @@ export function initUI(deps) {
     if (session.status === 'title') session.transition('mode-select', mode);
     setupMode = mode;
     setupChoice = null;
-    $('setup-h').textContent = 'Setup — ' + modeName(mode);
+    bindText($('setup-h'), L('Setup — {mode}', { mode: () => modeName(mode) }));
     $('setup-summary').hidden = true;
     $('setup-start').disabled = true;
     buildSetupPicker(mode);
@@ -511,7 +545,7 @@ export function initUI(deps) {
   }
 
   function modeName(mode) {
-    return { learn: 'Learn', journey: 'Journey', daily: 'Daily', practice: 'Practice', challenge: 'Challenge', score: 'Score chase' }[mode] || mode;
+    return { learn: T('Learn'), journey: T('Journey'), daily: T('Daily'), practice: T('Practice'), challenge: T('Challenge'), score: T('Score chase') }[mode] || mode;
   }
 
   function buildSetupPicker(mode) {
@@ -533,8 +567,8 @@ export function initUI(deps) {
         const item = el('button', 'picker-item');
         item.dataset.contentId = lesson.id;
         item.setAttribute('aria-pressed', 'false');
-        item.appendChild(el('span', null, lesson.name));
-        item.appendChild(el('span', 'done-mark', done ? '✓ done' : ''));
+        item.appendChild(el('span', null, () => contentName(lesson)));
+        item.appendChild(el('span', 'done-mark', done ? () => '✓ ' + T('done') : ''));
         item.addEventListener('click', () => pick(lesson));
         const li = el('li');
         li.appendChild(item);
@@ -552,14 +586,14 @@ export function initUI(deps) {
       item.dataset.contentId = c.id;
       item.setAttribute('aria-pressed', 'false');
       const best = (progress.daily.best || {})[key];
-      item.appendChild(el('span', null, c.name));
-      item.appendChild(el('span', 'done-mark', best ? 'best ' + fmtInt(best) : ''));
+      item.appendChild(el('span', null, () => contentName(c)));
+      item.appendChild(el('span', 'done-mark', best ? L('best {score}', { score: fmtInt(best) }) : ''));
       item.addEventListener('click', () => pick(c));
       const li = el('li');
       li.appendChild(item);
       list.appendChild(li);
       host.appendChild(list);
-      const note = el('p', 'dim', 'One shared seed per UTC day; your best is kept. Next board in ' + dailyCountdown() + '.');
+      const note = el('p', 'dim', L('One shared seed per UTC day; your best is kept. Next board in {time}.', { time: dailyCountdown() }));
       host.appendChild(note);
       pick(c);
       return;
@@ -571,8 +605,8 @@ export function initUI(deps) {
         const item = el('button', 'picker-item');
         item.dataset.contentId = 'practice-' + d.id;
         item.setAttribute('aria-pressed', 'false');
-        item.appendChild(el('span', null, d.name));
-        item.appendChild(el('span', 'dim', d.desc));
+        item.appendChild(el('span', null, L(d.name)));
+        item.appendChild(el('span', 'dim', L(d.desc)));
         item.addEventListener('click', () => {
           const seed = ($('practice-seed') || {}).value || '';
           pick(content.practiceContent(d.id, seed));
@@ -583,11 +617,11 @@ export function initUI(deps) {
       }
       host.appendChild(list);
       const row = el('div', 'picker-row');
-      const label = el('label', null, 'Seed (optional)');
+      const label = el('label', null, L('Seed (optional)'));
       const input = el('input');
       input.type = 'text';
       input.id = 'practice-seed';
-      input.placeholder = 'random';
+      bindText(input, L('random'), 'placeholder');
       input.maxLength = 32;
       label.htmlFor = 'practice-seed';
       row.appendChild(label);
@@ -603,7 +637,7 @@ export function initUI(deps) {
         const item = el('button', 'picker-item');
         item.dataset.contentId = c.id;
         item.setAttribute('aria-pressed', 'false');
-        item.appendChild(el('span', null, c.name));
+        item.appendChild(el('span', null, () => contentName(c)));
         item.appendChild(el('span', 'done-mark', best ? '★'.repeat(best) : ''));
         item.addEventListener('click', () => pick(c));
         const li = el('li');
@@ -616,19 +650,19 @@ export function initUI(deps) {
 
     if (mode === 'score') {
       const row = el('div', 'picker-row');
-      const label = el('label', null, 'Seed');
+      const label = el('label', null, L('Seed'));
       label.htmlFor = 'chase-seed';
       const input = el('input');
       input.type = 'text';
       input.id = 'chase-seed';
-      input.placeholder = 'any word or phrase';
+      bindText(input, L('any word or phrase'), 'placeholder');
       input.maxLength = 40;
-      const randBtn = el('button', 'btn btn-small', 'Random');
+      const randBtn = el('button', 'btn btn-small', L('Random'));
       randBtn.addEventListener('click', () => {
         input.value = Math.random().toString(36).slice(2, 10);
         pick(content.scoreChaseContent(input.value));
       });
-      const todayBtn = el('button', 'btn btn-small', "Today's seed");
+      const todayBtn = el('button', 'btn btn-small', L("Today's seed"));
       todayBtn.addEventListener('click', () => {
         input.value = content.dayKeyFor(platform.now());
         pick(content.scoreChaseContent(input.value));
@@ -641,31 +675,35 @@ export function initUI(deps) {
       row.appendChild(randBtn);
       row.appendChild(todayBtn);
       host.appendChild(row);
-      host.appendChild(el('p', 'dim', 'Share a seed with a friend to chase the same board. Fixed ruleset: the same seed and moves always give the same score.'));
+      host.appendChild(el('p', 'dim', L('Share a seed with a friend to chase the same board. Fixed ruleset: the same seed and moves always give the same score.')));
       return;
     }
   }
 
   function fillSetupSummary(c) {
     $('setup-summary').hidden = false;
-    $('setup-name').textContent = c.name;
-    $('setup-desc').textContent = c.desc;
-    const blockers = [];
-    if (c.ice && c.ice.length) blockers.push(c.ice.length + ' ice');
-    if (c.crates && c.crates.length) blockers.push(c.crates.length + ' crates');
-    $('setup-rules').textContent = c.width + '×' + c.height + ' · ' + c.colors + ' colors · ' + (c.moves > 100 ? 'unlimited' : c.moves) + ' moves' + (blockers.length ? ' · ' + blockers.join(', ') : '');
-    $('setup-duration').textContent = c.timeLimitSec ? fmtTime(c.timeLimitSec * 1000) + ' timed' : '~' + Math.max(1, Math.round((Math.min(c.moves, 40) * 4) / 60)) + ' min';
+    bindText($('setup-name'), () => contentName(c));
+    bindText($('setup-desc'), () => contentDesc(c));
+    bindText($('setup-rules'), () => {
+      const blockers = [];
+      if (c.ice && c.ice.length) blockers.push(T('{n} ice', { n: c.ice.length }));
+      if (c.crates && c.crates.length) blockers.push(T('{n} crates', { n: c.crates.length }));
+      return T('{w}×{h} · {colors} colors · {moves} moves', { w: c.width, h: c.height, colors: c.colors, moves: c.moves > 100 ? T('unlimited') : c.moves }) + (blockers.length ? ' · ' + blockers.join(', ') : '');
+    });
+    bindText($('setup-duration'), () => (c.timeLimitSec ? T('{time} timed', { time: fmtTime(c.timeLimitSec * 1000) }) : T('~{n} min', { n: Math.max(1, Math.round((Math.min(c.moves, 40) * 4) / 60)) })));
     $('setup-players').textContent = '1';
-    const assists = [];
-    assists.push(c.assists.undo ? 'undo' : 'no undo');
-    assists.push(c.assists.hints ? 'hints' : 'no hints');
-    if (settings.access.timingAssist && c.timeLimitSec) assists.push('timing assist ×1.5');
-    $('setup-assists').textContent = assists.join(', ');
-    $('setup-ranked').textContent = c.ranked ? (platform.hosted ? 'Ranked (personal bests)' : 'Ranked (recorded locally)') : 'Casual';
+    bindText($('setup-assists'), () => {
+      const assists = [];
+      assists.push(c.assists.undo ? T('undo') : T('no undo'));
+      assists.push(c.assists.hints ? T('hints') : T('no hints'));
+      if (settings.access.timingAssist && c.timeLimitSec) assists.push(T('timing assist ×1.5'));
+      return assists.join(', ');
+    });
+    bindText($('setup-ranked'), c.ranked ? (platform.hosted ? L('Ranked (personal bests)') : L('Ranked (recorded locally)')) : L('Casual'));
     const goals = $('setup-goals');
     goals.innerHTML = '';
     if (c.kind === 'lesson') {
-      goals.appendChild(el('li', null, 'Finish every guided step.'));
+      goals.appendChild(el('li', null, L('Finish every guided step.')));
     } else {
       for (const g of c.goals) goals.appendChild(goalListItem(g));
     }
@@ -686,10 +724,10 @@ export function initUI(deps) {
       sw.setAttribute('aria-hidden', 'true');
       li.appendChild(sw);
     }
-    li.appendChild(el('span', null, goalText(g) + (g.done !== undefined ? ' — ' + goalLeftText(g) : '')));
+    li.appendChild(el('span', null, () => goalText(g) + (g.done !== undefined ? ' — ' + goalLeftText(g) : '')));
     if (g.done) {
       const chk = el('span', 'goal-check', '✓');
-      chk.setAttribute('aria-label', 'done');
+      bindText(chk, L('done'), 'aria-label');
       li.appendChild(chk);
     }
     return li;
@@ -720,7 +758,7 @@ export function initUI(deps) {
       const li = el('li');
       const b = el('button', 'stage-btn' + (n === unlocked ? ' current' : ''));
       b.disabled = n > unlocked;
-      b.setAttribute('aria-label', 'Stage ' + n + (c.mastery ? ' (mastery)' : '') + (got ? ', ' + got + ' stars' : '') + (n > unlocked ? ', locked' : ''));
+      bindText(b, () => T('Stage {n}', { n }) + (c.mastery ? ' ' + T('(mastery)') : '') + (got ? ', ' + T('{n} stars', { n: got }) : '') + (n > unlocked ? ', ' + T('locked') : ''), 'aria-label');
       b.appendChild(el('span', null, String(n)));
       const starSpan = el('span', 'stage-stars');
       for (let s = 1; s <= 3; s++) starSpan.appendChild(el('span', s <= got ? null : 'off', '★'));
@@ -733,7 +771,7 @@ export function initUI(deps) {
       b.addEventListener('click', () => {
         setupMode = 'journey';
         setupChoice = c;
-        $('setup-h').textContent = 'Setup — Journey';
+        bindText($('setup-h'), L('Setup — {mode}', { mode: L('Journey') }));
         buildSetupPicker('journey');
         fillSetupSummary(c);
         $('setup-start').disabled = false;
@@ -743,7 +781,7 @@ export function initUI(deps) {
       grid.appendChild(li);
     });
     const done = Object.keys(progress.journeyStars || {}).length;
-    $('journey-progress-line').textContent = done + ' of ' + content.JOURNEY.length + ' stages complete · ' + totalStars + '★ earned · mastery stages marked ◆';
+    bindText($('journey-progress-line'), L('{done} of {total} stages complete · {stars}★ earned · mastery stages marked ◆', { done, total: content.JOURNEY.length, stars: totalStars }));
   }
 
   /* ============ FSM → screens ============ */
@@ -772,7 +810,7 @@ export function initUI(deps) {
         runCountdown();
         break;
       case 'tutorial':
-        $('hud-state').textContent = 'Lesson';
+        bindText($('hud-state'), L('Lesson'));
         showScreen('game');
         startLesson();
         break;
@@ -781,13 +819,13 @@ export function initUI(deps) {
           closeOverlay('pause');
           audio.uiSound('resume');
         }
-        $('hud-state').textContent = 'Your move';
+        bindText($('hud-state'), L('Your move'));
         break;
       case 'resolving':
-        $('hud-state').textContent = 'Settling…';
+        bindText($('hud-state'), L('Settling…'));
         break;
       case 'paused':
-        $('hud-state').textContent = 'Paused';
+        bindText($('hud-state'), L('Paused'));
         openOverlay('pause');
         audio.uiSound('pause');
         break;
@@ -821,17 +859,17 @@ export function initUI(deps) {
     const overlay = $('ready-overlay');
     const text = $('ready-text');
     clearCountdown();
-    text.textContent = '';
-    const steps = ['Ready…', 'Set…', 'Go!'];
+    bindText(text, '');
+    const steps = [L('Ready…'), L('Set…'), L('Go!')];
     overlay.hidden = false;
     overlay.setAttribute('aria-hidden', 'false');
-    announce('Get ready', true);
+    announce(T('Get ready'), true);
     countdownTimers.forEach(clearTimeout);
     countdownTimers = [];
     steps.forEach((s, i) => {
       countdownTimers.push(
         setTimeout(() => {
-          text.textContent = s;
+          bindText(text, s);
           text.classList.remove('ready-pop');
           void text.offsetWidth; // restart CSS animation
           text.classList.add('ready-pop');
@@ -844,9 +882,9 @@ export function initUI(deps) {
       setTimeout(() => {
         overlay.hidden = true;
         overlay.setAttribute('aria-hidden', 'true');
-        text.textContent = '';
+        bindText(text, '');
         session.beginPlay('countdown-complete');
-        announce('Go! ' + (session.content ? session.content.name : ''), true);
+        announce(T('Go! {name}', { name: session.content ? contentName(session.content) : '' }), true);
       }, steps.length * 620 + 120)
     );
   }
@@ -871,7 +909,7 @@ export function initUI(deps) {
       const list = $('hud-goals');
       list.innerHTML = '';
       h.goals.forEach((g) => list.appendChild(goalListItem(g)));
-      announce('Score ' + fmtInt(h.score) + '. ' + (h.movesLeft > 100 ? 'Unlimited moves.' : h.movesLeft + ' moves left.') + ' ' + h.goals.map((g) => goalText(g) + ' ' + goalLeftText(g)).join('. '));
+      announce(T('Score {n}.', { n: fmtInt(h.score) }) + ' ' + (h.movesLeft > 100 ? T('Unlimited moves.') : T('{n} moves left.', { n: h.movesLeft })) + ' ' + h.goals.map((g) => goalText(g) + ' ' + goalLeftText(g)).join('. '));
       mirrorRender();
     }
   });
@@ -881,23 +919,25 @@ export function initUI(deps) {
     $('hud-timer-wrap').classList.toggle('warn', leftMs < 10000);
     audio.timerUpdate(leftMs);
     if (leftMs > 0 && leftMs <= 10500 && Math.round(leftMs / 1000) !== Math.round((leftMs + 100) / 1000)) {
-      announce(Math.ceil(leftMs / 1000) + ' seconds', false);
+      announce(T('{n} seconds', { n: Math.ceil(leftMs / 1000) }), false);
     }
   });
 
   session.on('round', ({ content: c, resumed }) => {
-    $('hud-round-name').textContent = c.name;
+    bindText($('hud-round-name'), () => contentName(c));
     hudGoalKey = '';
-    const assists = [];
-    if (c.assists.undo) assists.push('Undo allowed');
-    if (!c.assists.hints) assists.push('No hints');
-    if (c.ranked) assists.push('Ranked');
-    $('hud-assists-line').textContent = assists.join(' · ');
+    bindText($('hud-assists-line'), () => {
+      const assists = [];
+      if (c.assists.undo) assists.push(T('Undo allowed'));
+      if (!c.assists.hints) assists.push(T('No hints'));
+      if (c.ranked) assists.push(T('Ranked'));
+      return assists.join(' · ');
+    });
     $('btn-undo').disabled = !c.assists.undo;
     $('tray-undo').disabled = !c.assists.undo;
     $('btn-hint').disabled = !c.assists.hints;
     $('tray-hint').disabled = !c.assists.hints;
-    $('hud-state').textContent = resumed ? 'Resumed' : 'Get ready';
+    bindText($('hud-state'), resumed ? L('Resumed') : L('Get ready'));
     mirrorBuild();
     if (!webglAvailable) {
       $('webgl-fallback').hidden = false;
@@ -906,20 +946,20 @@ export function initUI(deps) {
   });
 
   session.on('invalid', ({ reason }) => {
-    const msg = INVALID_TEXT[reason] || 'That move is not legal.';
+    const msg = INVALID_TEXT[reason] || L('That move is not legal.');
     toast(msg, 'warn');
     announce(msg, true);
   });
 
   session.on('hint', () => {
     audio.uiSound('hint');
-    toast('Hint: watch the two highlighted jewels.', null, true);
-    announce('Hint shown on the board.', false);
+    toast(L('Hint: watch the two highlighted jewels.'), null, true);
+    announce(T('Hint shown on the board.'), false);
   });
 
   session.on('undo', () => {
     audio.uiSound('undo');
-    toast('Undone.', null, true);
+    toast(L('Undone.'), null, true);
     mirrorRender();
   });
 
@@ -976,7 +1016,7 @@ export function initUI(deps) {
     settings.camera.preset = next;
     storage.saveSettings(settings);
     if (scene) scene.setCameraPreset(next);
-    toast('Camera: ' + next, null);
+    toast(L('Camera: {preset}', { preset: { default: L('default'), low: L('low'), high: L('high') }[next] || next }), null);
   }
 
   session.on('fsm', ({ to }) => {
@@ -1024,12 +1064,12 @@ export function initUI(deps) {
     const s = lesson.steps[lesson.i];
     const banner = $('tutorial-banner');
     banner.hidden = false;
-    $('tutorial-text').textContent = s.text;
-    $('tutorial-step-count').textContent = 'Step ' + (lesson.i + 1) + ' of ' + lesson.steps.length;
+    bindText($('tutorial-text'), L(s.text));
+    bindText($('tutorial-step-count'), L('Step {n} of {total}', { n: lesson.i + 1, total: lesson.steps.length }));
     requestAnimationFrame(updateInsets); // banner height now known: keep the board above it
-    $('btn-lesson-end').textContent = 'End lesson';
+    bindText($('btn-lesson-end'), L('End lesson'));
     analytics.track('tutorial_step', { id: lesson.content.tutorial, step: lesson.i });
-    announce('Lesson step ' + (lesson.i + 1) + ' of ' + lesson.steps.length + '. ' + s.text, true);
+    announce(T('Lesson step {n} of {total}.', { n: lesson.i + 1, total: lesson.steps.length }) + ' ' + T(s.text), true);
     // Input gate: guided swaps only allow the taught pair (either direction).
     if (s.require && s.require.kind === 'swap') {
       const r = s.require;
@@ -1062,8 +1102,8 @@ export function initUI(deps) {
     if (scene) scene.clearHint();
     mirrorSetGuide(null);
     if (completed) {
-      announce('Lesson complete!', true);
-      toast('Lesson complete!', 'ok');
+      announce(T('Lesson complete!'), true);
+      toast(L('Lesson complete!'), 'ok');
       // Let the last move's cosmetics settle before the results overlay.
       setTimeout(() => {
         if (session.state && session.state.phase === 'ready') session.forceFinish(rules.END.GOALS);
@@ -1132,19 +1172,19 @@ export function initUI(deps) {
     const seq = ++lbSeq;
     if (!r.ranked || !platform.hosted || typeof platform.submitScore !== 'function') { line.hidden = true; return; }
     line.hidden = false;
-    line.textContent = SH.lbPosting;
+    bindText(line, () => SH.lbPosting);
     platform.submitScore(r.score).then((res) => {
       if (seq !== lbSeq) return;
-      line.textContent = !res.posted ? SH.lbNotPosted
-        : res.rank ? SH.lbRank.replace('{rank}', res.rank) : SH.lbPosted;
+      bindText(line, () => (!res.posted ? SH.lbNotPosted
+        : res.rank ? SH.lbRank.replace('{rank}', res.rank) : SH.lbPosted));
     });
   }
 
   session.on('results', (r) => {
     recordLocalBoardEntry(r);
-    $('res-h').textContent = REASON_HEADLINES[r.reason] || 'Round over';
+    bindText($('res-h'), REASON_HEADLINES[r.reason] || L('Round over'));
     $('res-stars').textContent = r.stars > 0 ? '★'.repeat(r.stars) + '☆'.repeat(3 - r.stars) : '☆☆☆';
-    $('res-stars').setAttribute('aria-label', r.stars + ' of 3 stars');
+    bindText($('res-stars'), L('{n} of 3 stars', { n: r.stars }), 'aria-label');
     for (let s = 0; s < r.stars; s++) {
       setTimeout(() => audio.uiSound('star'), 400 + s * 350);
     }
@@ -1169,7 +1209,7 @@ export function initUI(deps) {
     }
     if (!anyRow) {
       const tr = el('tr');
-      const td = el('td', null, 'No points scored');
+      const td = el('td', null, L('No points scored'));
       td.colSpan = 2;
       tr.appendChild(td);
       tbody.appendChild(tr);
@@ -1189,7 +1229,7 @@ export function initUI(deps) {
       ul.innerHTML = '';
       for (const key of newAch) {
         const def = ACHIEVEMENTS.find((a) => a.key === key);
-        ul.appendChild(el('li', 'ach-pill', (def ? def.name : key)));
+        ul.appendChild(el('li', 'ach-pill', def ? L(def.name) : key));
       }
     } else {
       achWrap.hidden = true;
@@ -1201,17 +1241,17 @@ export function initUI(deps) {
       const after = masteryProgress(mastery.total);
       $('res-mastery-fill').style.width = after.pct + '%';
       $('res-mastery-bar').setAttribute('aria-valuenow', String(Math.round(after.pct)));
-      $('res-mastery-text').textContent =
-        '+' + mastery.gained + ' XP · level ' + mastery.levelAfter + (mastery.levelAfter > mastery.levelBefore ? ' — level up!' : ' · ' + after.toNext + ' XP to next');
+      bindText($('res-mastery-text'), () =>
+        T('+{xp} XP · level {level}', { xp: mastery.gained, level: mastery.levelAfter }) + (mastery.levelAfter > mastery.levelBefore ? ' — ' + T('level up!') : ' · ' + T('{n} XP to next', { n: after.toNext })));
       void before;
     }
     const unlocks = $('res-unlocks');
     unlocks.innerHTML = '';
     for (const u of (r.progression && r.progression.unlocks) || []) {
-      unlocks.appendChild(el('li', 'ach-pill', 'Unlocked ' + u.type + ': ' + cosmeticName(u.type, u.id)));
+      unlocks.appendChild(el('li', 'ach-pill', () => T('Unlocked {type}: {name}', { type: COSMETIC_TYPES[u.type] || u.type, name: cosmeticName(u.type, u.id) })));
     }
     if (r.progression && r.progression.dailyStreak) {
-      unlocks.appendChild(el('li', 'ach-pill', 'Daily streak ' + r.progression.dailyStreak + ' 🔥'));
+      unlocks.appendChild(el('li', 'ach-pill', L('Daily streak {n} 🔥', { n: r.progression.dailyStreak })));
     }
 
     // Comparison line: personal best + server rank when available.
@@ -1219,9 +1259,9 @@ export function initUI(deps) {
     cmp.textContent = '…';
     fillComparison(r, cmp);
 
-    $('res-next').textContent = nextLabel(r);
+    bindText($('res-next'), nextLabel(r));
     openOverlay('results');
-    announce((REASON_HEADLINES[r.reason] || 'Round over') + ' Score ' + fmtInt(r.score) + '. ' + r.stars + ' stars.', true);
+    announce(I18N.text(REASON_HEADLINES[r.reason] || L('Round over')) + ' ' + T('Score {n}.', { n: fmtInt(r.score) }) + ' ' + T('{n} stars.', { n: r.stars }), true);
     refreshTitle();
   });
 
@@ -1235,9 +1275,9 @@ export function initUI(deps) {
   }
 
   function nextLabel(r) {
-    if (r.mode === 'journey' && r.won && r.contentId !== 'j40') return 'Next stage';
-    if (r.mode === 'learn') return 'Next lesson';
-    return 'Play again';
+    if (r.mode === 'journey' && r.won && r.contentId !== 'j40') return L('Next stage');
+    if (r.mode === 'learn') return L('Next lesson');
+    return L('Play again');
   }
 
   function fillComparison(r, cmp) {
@@ -1245,9 +1285,9 @@ export function initUI(deps) {
     const mine = boards.entries.filter((e) => e.contentId === r.contentId);
     const best = mine.reduce((m, e) => Math.max(m, e.score), 0);
     const isBest = r.score >= best && r.score > 0;
-    const text = isBest && r.score > 0 ? 'New personal best on this board!' : 'Personal best on this board: ' + fmtInt(best) + '.';
+    const text = isBest && r.score > 0 ? L('New personal best on this board!') : L('Personal best on this board: {score}.', { score: fmtInt(best) });
     if (isBest && r.score > 0) audio.uiSound('record');
-    cmp.textContent = text;
+    bindText(cmp, text);
   }
 
   function recordLocalBoardEntry(r) {
@@ -1332,27 +1372,27 @@ export function initUI(deps) {
     const r = session._lastResults;
     if (!r || !r.replay) return;
     if (!scene) {
-      toast('Replay needs the 3D view.', 'warn');
+      toast(L('Replay needs the 3D view.'), 'warn');
       return;
     }
     closeOverlay('results');
     try {
       replayState = rules.createGame(r.replay.config);
     } catch {
-      toast('Replay unavailable for this round.', 'warn');
+      toast(L('Replay unavailable for this round.'), 'warn');
       return;
     }
     scene.buildBoard(replayState);
     const banner = $('tutorial-banner');
     banner.hidden = false;
-    $('tutorial-text').textContent = 'Replay of your round — ' + r.replay.commands.length + ' moves.';
-    $('tutorial-step-count').textContent = '';
-    $('btn-lesson-end').textContent = 'End replay';
+    bindText($('tutorial-text'), L('Replay of your round — {n} moves.', { n: r.replay.commands.length }));
+    bindText($('tutorial-step-count'), '');
+    bindText($('btn-lesson-end'), L('End replay'));
     let i = 0;
     const step = () => {
       if (!replayState) return;
       if (i >= r.replay.commands.length || replayState.phase !== 'ready') {
-        $('tutorial-text').textContent = 'Replay complete — final score ' + fmtInt(replayState.score) + '.';
+        bindText($('tutorial-text'), L('Replay complete — final score {score}.', { score: fmtInt(replayState.score) }));
         return;
       }
       const cmd = r.replay.commands[i++];
@@ -1455,21 +1495,20 @@ export function initUI(deps) {
         if (i === mirrorSel) cls += ' mirror-sel';
         node.className = cls;
         if (node.textContent !== glyph) node.textContent = glyph;
-        const desc =
-          'row ' + (y + 1) + ' column ' + (x + 1) + ': ' +
-          (cell.crate > 0
-            ? 'crate, ' + cell.crate + ' hit' + (cell.crate > 1 ? 's' : '') + ' left'
-            : cell.j
-              ? COLOR_GLYPH_NAMES[cell.j.c] +
-                (cell.j.s !== SPECIAL.NONE ? ' ' + SPECIAL_NAMES[cell.j.s] : '') +
-                (cell.ice > 0 ? ', frozen' + (cell.ice > 1 ? ' deeply' : '') : '')
-              : 'empty');
-        node.setAttribute('aria-label', desc + (i === mirrorSel ? ', selected' : ''));
+        const what = cell.crate > 0
+          ? (cell.crate > 1 ? T('crate, {n} hits left', { n: cell.crate }) : T('crate, 1 hit left'))
+          : cell.j
+            ? COLOR_GLYPH_NAMES[cell.j.c]() +
+              (cell.j.s !== SPECIAL.NONE ? ' ' + SPECIAL_LABELS[cell.j.s]() : '') +
+              (cell.ice > 0 ? ', ' + (cell.ice > 1 ? T('frozen deeply') : T('frozen')) : '')
+            : T('empty');
+        const desc = T('row {r} column {c}: {what}', { r: y + 1, c: x + 1, what });
+        node.setAttribute('aria-label', desc + (i === mirrorSel ? ', ' + T('selected') : ''));
       }
     }
     const legal = s.phase === 'ready' ? rules.legalActions(s).length : 0;
     $('mirror-summary').textContent =
-      'Score ' + fmtInt(s.score) + ' · ' + (s.movesLeft > 100 ? 'unlimited moves' : s.movesLeft + ' moves left') + ' · ' + legal + ' legal swaps.';
+      T('Score {n}', { n: fmtInt(s.score) }) + ' · ' + (s.movesLeft > 100 ? T('unlimited moves') : T('{n} moves left', { n: s.movesLeft })) + ' · ' + T('{n} legal swaps.', { n: legal });
   }
 
   function mirrorTap(i) {
@@ -1504,7 +1543,7 @@ export function initUI(deps) {
     if (existing) existing.remove();
     if (!stepData || !mirrorOn) return;
     const host = $('mirror-panel');
-    const p = el('p', 'mirror-guide-text', stepData.text);
+    const p = el('p', 'mirror-guide-text', L(stepData.text));
     p.id = 'mirror-guide';
     host.insertBefore(p, $('mirror-board'));
   }
@@ -1649,7 +1688,7 @@ export function initUI(deps) {
         storage.saveSettings(settings);
         audio.setMuted(settings.audio.muted);
         syncSettingsControls();
-        toast(settings.audio.muted ? 'Muted' : 'Sound on', null);
+        toast(settings.audio.muted ? L('Muted') : L('Sound on'), null);
         break;
       default:
         break;
@@ -1807,7 +1846,7 @@ export function initUI(deps) {
   $('set-timing-assist').addEventListener('change', () => {
     settings.access.timingAssist = $('set-timing-assist').checked;
     settingsChanged('access.timingAssist');
-    toast('Timing assistance applies to the next timed round.', null);
+    toast(L('Timing assistance applies to the next timed round.'), null);
   });
   $('set-haptics').addEventListener('change', () => {
     settings.input.haptics = $('set-haptics').checked;
@@ -1840,7 +1879,7 @@ export function initUI(deps) {
   $('btn-replay-tutorials').addEventListener('click', () => {
     progress.tutorialsDone = {};
     storage.saveProgress(progress);
-    toast('Tutorials reset — they will play again from Learn.', 'ok');
+    toast(L('Tutorials reset — they will play again from Learn.'), 'ok');
   });
   $('btn-reset-binds').addEventListener('click', () => {
     for (const k of Object.keys(keyMap)) delete keyMap[k];
@@ -1855,11 +1894,11 @@ export function initUI(deps) {
   });
   $('btn-wipe').addEventListener('click', () => {
     modal({
-      title: 'Reset all data?',
-      body: 'This erases every local setting, progress record, and snapshot for Jewel Cascade on this device. This cannot be undone.',
+      title: L('Reset all data?'),
+      body: L('This erases every local setting, progress record, and snapshot for Jewel Cascade on this device. This cannot be undone.'),
       actions: [
-        { label: 'Erase everything', value: 'wipe' },
-        { label: 'Cancel', value: 'cancel', primary: true },
+        { label: L('Erase everything'), value: 'wipe' },
+        { label: L('Cancel'), value: 'cancel', primary: true },
       ],
     }).then((v) => {
       if (v === 'wipe') {
@@ -1879,10 +1918,10 @@ export function initUI(deps) {
     for (const action of Object.keys(DEFAULT_KEYBOARD)) {
       const li = el('li', 'remap-item');
       li.appendChild(el('span', null, ACTION_LABELS[action] || action));
-      const btn = el('button', 'btn btn-small', keyLabel(keyMap[action] || '—'));
+      const btn = el('button', 'btn btn-small', () => keyLabel(keyMap[action] || '—'));
       btn.addEventListener('click', () => {
         rebinding = { kind: 'keyboard', action };
-        btn.textContent = 'press a key…';
+        bindText(btn, L('press a key…'));
         btn.classList.add('listening');
       });
       li.appendChild(btn);
@@ -1893,10 +1932,10 @@ export function initUI(deps) {
     for (const action of GAMEPAD_ACTIONS) {
       const li = el('li', 'remap-item');
       li.appendChild(el('span', null, ACTION_LABELS[action] || action));
-      const btn = el('button', 'btn btn-small', 'Button ' + (padMap[action] !== undefined ? padMap[action] : '—'));
+      const btn = el('button', 'btn btn-small', L('Button {n}', { n: padMap[action] !== undefined ? padMap[action] : '—' }));
       btn.addEventListener('click', () => {
         rebinding = { kind: 'gamepad', action };
-        btn.textContent = 'press a button…';
+        bindText(btn, L('press a button…'));
         btn.classList.add('listening');
       });
       li.appendChild(btn);
@@ -1955,22 +1994,23 @@ export function initUI(deps) {
     host.innerHTML = '';
     const cards = [
       {
-        t: 'Swap & match',
-        b: 'Swap two neighbouring jewels (drag, or tap one then the other). A swap only counts when it lines up three or more of a color. Keyboard: ' +
-          [keyMap.up, keyMap.down, keyMap.left, keyMap.right].map(keyLabel).join('/') + ' move the cursor, ' + keyLabel(keyMap.confirm) + ' selects.',
+        t: L('Swap & match'),
+        b: () => T('Swap two neighbouring jewels (drag, or tap one then the other). A swap only counts when it lines up three or more of a color. Keyboard: {keys} move the cursor, {confirm} selects.',
+          { keys: [keyMap.up, keyMap.down, keyMap.left, keyMap.right].map(keyLabel).join('/'), confirm: keyLabel(keyMap.confirm) }),
       },
-      { t: 'Moves & goals', b: 'Every accepted swap spends one move. Finish all goals before moves run out. Goals sit in the objective rail; the HUD shows moves and score.' },
-      { t: 'Rays (4 in a line)', b: 'A line of four forges a ray. It fires when matched or struck and clears a whole row or column.' },
-      { t: 'Blooms (L or T)', b: 'Matching around a corner grows a bloom, which clears a 3×3 patch when it fires.' },
-      { t: 'Prisms (5 in a line)', b: 'Five in a line cut a prism. Swap it with a jewel to shatter every jewel of that color; swap it with another special for a bigger effect.' },
-      { t: 'Ice', b: 'Frozen jewels cannot move but still match. Matching through ice cracks it; deep ice takes two hits.' },
-      { t: 'Crates', b: 'Crates hold no jewel and never move. Matches next to a crate dent it; banded crates take two hits.' },
+      { t: L('Moves & goals'), b: L('Every accepted swap spends one move. Finish all goals before moves run out. Goals sit in the objective rail; the HUD shows moves and score.') },
+      { t: L('Rays (4 in a line)'), b: L('A line of four forges a ray. It fires when matched or struck and clears a whole row or column.') },
+      { t: L('Blooms (L or T)'), b: L('Matching around a corner grows a bloom, which clears a 3×3 patch when it fires.') },
+      { t: L('Prisms (5 in a line)'), b: L('Five in a line cut a prism. Swap it with a jewel to shatter every jewel of that color; swap it with another special for a bigger effect.') },
+      { t: L('Ice'), b: L('Frozen jewels cannot move but still match. Matching through ice cracks it; deep ice takes two hits.') },
+      { t: L('Crates'), b: L('Crates hold no jewel and never move. Matches next to a crate dent it; banded crates take two hits.') },
       {
-        t: 'Controls',
-        b: keyLabel(keyMap.hint) + ' hint · ' + keyLabel(keyMap.undo) + ' undo (practice) · ' + keyLabel(keyMap.skip) + ' skip animation · ' + keyLabel(keyMap.camera) + ' camera · ' + keyLabel(keyMap.mute) + ' mute · ' + keyLabel(keyMap.pause) + ' pause. Gamepad: A select, B cancel, X hint, Y undo, start pause. Rebind everything in Settings → Controls.',
+        t: L('Controls'),
+        b: () => T('{hint} hint · {undo} undo (practice) · {skip} skip animation · {camera} camera · {mute} mute · {pause} pause. Gamepad: A select, B cancel, X hint, Y undo, start pause. Rebind everything in Settings → Controls.',
+          { hint: keyLabel(keyMap.hint), undo: keyLabel(keyMap.undo), skip: keyLabel(keyMap.skip), camera: keyLabel(keyMap.camera), mute: keyLabel(keyMap.mute), pause: keyLabel(keyMap.pause) }),
       },
-      { t: 'Stars & mastery', b: 'Finish goals for ★, beat score thresholds for ★★ and ★★★. Every round earns mastery XP toward cosmetic themes, trails, frames, and titles — looks only, never power.' },
-      { t: 'Fair play', b: 'Scoring is deterministic: the same seed and the same moves always produce the same score. Daily seeds never change once published.' },
+      { t: L('Stars & mastery'), b: L('Finish goals for ★, beat score thresholds for ★★ and ★★★. Every round earns mastery XP toward cosmetic themes, trails, frames, and titles — looks only, never power.') },
+      { t: L('Fair play'), b: L('Scoring is deterministic: the same seed and the same moves always produce the same score. Daily seeds never change once published.') },
     ];
     for (const c of cards) {
       const card = el('article', 'help-card');
@@ -1992,12 +2032,12 @@ export function initUI(deps) {
       const li = el('li', 'ach-item' + (got ? ' owned' : ''));
       li.appendChild(el('span', 'ach-icon', got ? '★' : '☆'));
       const wrap = el('div');
-      wrap.appendChild(el('strong', null, a.name));
-      wrap.appendChild(el('p', 'dim', a.desc + (got ? ' Unlocked ' + String(got.at).slice(0, 10) + '.' : '')));
+      wrap.appendChild(el('strong', null, L(a.name)));
+      wrap.appendChild(el('p', 'dim', () => T(a.desc) + (got ? ' ' + T('Unlocked {date}.', { date: String(got.at).slice(0, 10) }) : '')));
       li.appendChild(wrap);
       ul.appendChild(li);
     }
-    $('ach-summary').textContent = owned + ' of ' + ACHIEVEMENTS.length + ' unlocked.';
+    bindText($('ach-summary'), L('{n} of {total} unlocked.', { n: owned, total: ACHIEVEMENTS.length }));
   }
 
   /* ============ boards ============ */
@@ -2015,7 +2055,7 @@ export function initUI(deps) {
   function refreshBoards() {
     const host = $('boards-list');
     host.innerHTML = '';
-    const note = el('p', 'dim', 'Loading boards…');
+    const note = el('p', 'dim', L('Loading boards…'));
     host.appendChild(note);
     const dayKey = content.dayKeyFor(platform.now());
     const contentId = boardTab === 'daily' ? 'daily-' + dayKey : undefined;
@@ -2025,7 +2065,7 @@ export function initUI(deps) {
         host.innerHTML = '';
         const entries = (res && res.entries) || [];
         if (!entries.length) {
-          host.appendChild(el('p', 'dim', platform.online ? 'No entries yet — be the first.' : 'Personal bests on this device:'));
+          host.appendChild(el('p', 'dim', platform.online ? L('No entries yet — be the first.') : L('Personal bests on this device:')));
         } else {
           host.appendChild(renderBoardTable(entries, !!(res && res.validated), res && res.label));
         }
@@ -2033,25 +2073,25 @@ export function initUI(deps) {
       })
       .catch(() => {
         host.innerHTML = '';
-        host.appendChild(el('p', 'dim', 'Boards unavailable right now. Personal bests:'));
+        host.appendChild(el('p', 'dim', L('Boards unavailable right now. Personal bests:')));
         host.appendChild(renderLocalBests(boardTab));
       });
   }
 
   function renderBoardTable(entries, validated, label) {
     const table = el('table', 'board-table');
-    const cap = el('caption', null, (label || (validated ? 'Validated' : 'Casual')) + (validated ? ' — replay-verified' : ' — casual, not replay-verified'));
+    const cap = el('caption', null, () => (typeof label === 'function' ? label() : label ? T(label) : validated ? T('Validated') : T('Casual')) + ' — ' + (validated ? T('replay-verified') : T('casual, not replay-verified')));
     table.appendChild(cap);
     const thead = el('thead');
     const hr = el('tr');
-    for (const h of ['#', 'Player', 'Score', 'Moves', 'When']) hr.appendChild(el('th', null, h));
+    for (const h of ['#', L('Player'), L('Score'), L('Moves'), L('When')]) hr.appendChild(el('th', null, h));
     thead.appendChild(hr);
     table.appendChild(thead);
     const tbody = el('tbody');
     entries.forEach((e, i) => {
       const tr = el('tr');
       tr.appendChild(el('td', null, String(i + 1)));
-      tr.appendChild(el('td', null, e.name || 'guest'));
+      tr.appendChild(el('td', null, e.name || L('guest')));
       tr.appendChild(el('td', null, fmtInt(e.score)));
       tr.appendChild(el('td', null, String(e.moves != null ? e.moves : '—')));
       tr.appendChild(el('td', null, String(e.at || '').slice(0, 10)));
@@ -2067,8 +2107,8 @@ export function initUI(deps) {
     if (board === 'daily') entries = entries.filter((e) => e.mode === 'daily');
     else if (board === 'friends') entries = entries.filter((e) => e.name === playerName());
     entries = entries.sort((a, b) => b.score - a.score).slice(0, 15);
-    if (!entries.length) return el('p', 'dim', 'No local results yet.');
-    return renderBoardTable(entries, false, 'Local bests (casual)');
+    if (!entries.length) return el('p', 'dim', L('No local results yet.'));
+    return renderBoardTable(entries, false, L('Local bests (casual)'));
   }
 
   /* ============ profile + cosmetics ============ */
@@ -2089,12 +2129,13 @@ export function initUI(deps) {
     'cascade-master': 'Cascade Master',
   };
   function cosmeticName(type, id) {
-    return COSMETIC_NAMES[id] || id;
+    return COSMETIC_NAMES[id] ? T(COSMETIC_NAMES[id]) : id;
   }
+  const COSMETIC_TYPES = { theme: L('theme'), trail: L('trail'), frame: L('frame'), title: L('title') };
 
   function refreshProfile() {
     const name = playerName();
-    $('prof-name').textContent = name;
+    bindText($('prof-name'), () => playerName());
     const av = $('prof-avatar');
     if (platform.hosted && platform.avatarUrl) {
       av.textContent = '';
@@ -2103,32 +2144,32 @@ export function initUI(deps) {
       img.alt = '';
       av.appendChild(img);
     } else av.textContent = name.slice(0, 1).toUpperCase();
-    $('prof-title-line').textContent = cosmeticName('title', settings.cosmetics.title);
+    bindText($('prof-title-line'), () => cosmeticName('title', settings.cosmetics.title));
     const syncEl = $('prof-sync');
     if (platform.hosted) {
       syncEl.hidden = false;
-      syncEl.textContent = syncLabel();
+      bindText(syncEl, () => syncLabel());
     } else {
       syncEl.hidden = true;
-      syncEl.textContent = '';
+      bindText(syncEl, '');
     }
     const xp = progress.masteryXp || 0;
     const level = masteryLevelForXp(xp);
     const mp = masteryProgress(xp);
     $('prof-mastery-fill').style.width = mp.pct + '%';
     $('prof-mastery-bar').setAttribute('aria-valuenow', String(Math.round(mp.pct)));
-    $('prof-mastery-text').textContent = 'Level ' + level + ' · ' + xp + ' XP' + (mp.toNext ? ' · ' + mp.toNext + ' to next' : ' · max level');
+    bindText($('prof-mastery-text'), () => T('Level {level} · {xp} XP', { level, xp }) + ' · ' + (mp.toNext ? T('{n} to next', { n: mp.toNext }) : T('max level')));
 
     const stats = $('prof-stats');
     stats.innerHTML = '';
     const c = progress.career || {};
     const rows = [
-      ['Rounds completed', c.roundsCompleted || 0],
-      ['Rounds won', c.roundsWon || 0],
-      ['Current win streak', c.winStreak || 0],
-      ['Best win streak', c.bestWinStreak || 0],
-      ['Total score', fmtInt(c.totalScore || 0)],
-      ['Daily streak', (progress.daily && progress.daily.streak) || 0],
+      [L('Rounds completed'), c.roundsCompleted || 0],
+      [L('Rounds won'), c.roundsWon || 0],
+      [L('Current win streak'), c.winStreak || 0],
+      [L('Best win streak'), c.bestWinStreak || 0],
+      [L('Total score'), fmtInt(c.totalScore || 0)],
+      [L('Daily streak'), (progress.daily && progress.daily.streak) || 0],
     ];
     for (const [k, v] of rows) {
       const div = el('div');
@@ -2155,7 +2196,7 @@ export function initUI(deps) {
     fillCosmeticSelect('cos-title', 'titles', ['apprentice', 'cascade-master'], settings.cosmetics.title, (v) => {
       settings.cosmetics.title = v;
       storage.saveSettings(settings);
-      $('prof-title-line').textContent = cosmeticName('title', v);
+      bindText($('prof-title-line'), () => cosmeticName('title', v));
     });
   }
 
@@ -2164,7 +2205,7 @@ export function initUI(deps) {
     sel.innerHTML = '';
     const unlocked = (progress.cosmeticsUnlocked && progress.cosmeticsUnlocked[bucket]) || [];
     for (const opt of all) {
-      const o = el('option', null, cosmeticName(bucket, opt) + (unlocked.includes(opt) ? '' : ' (locked)'));
+      const o = el('option', null, () => cosmeticName(bucket, opt) + (unlocked.includes(opt) ? '' : ' ' + T('(locked)')));
       o.value = opt;
       o.disabled = !unlocked.includes(opt);
       if (opt === current) o.selected = true;
@@ -2185,7 +2226,9 @@ export function initUI(deps) {
   audio.onCaption = (text) => {
     if (!settings.access.captions) return;
     const region = $('toast-region');
-    const t = el('div', 'toast toast-caption', text);
+    // Sound captions are translation keys; the rising chime carries its count.
+    const m = /^\[chime rising x(\d+)\]$/.exec(text);
+    const t = el('div', 'toast toast-caption', m ? T('[chime rising x{n}]', { n: m[1] }) : T(text));
     region.appendChild(t);
     setTimeout(() => t.remove(), 1600);
   };
@@ -2240,6 +2283,15 @@ export function initUI(deps) {
       setTimeout(() => session.settled(), fast ? 60 : 320);
     });
   }
+
+  /* ============ language changes ============ */
+  // Bound text re-renders itself (JCI18N.relabel); rebuild the few things that
+  // are computed rather than bound. Nothing about the round changes.
+  document.addEventListener('jc-language', () => {
+    hudGoalKey = '';   // the objective rail re-renders on the next HUD update
+    if (session.state) { session.emitHud(true); mirrorRender(); }
+    if (gfxPanel && gfxPanel.relabel) gfxPanel.relabel();
+  });
 
   /* ============ boot wiring ============ */
 

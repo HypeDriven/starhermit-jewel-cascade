@@ -308,6 +308,8 @@
         <section class="screen overlay" data-screen="settings" aria-labelledby="set-h" hidden role="dialog" aria-modal="true">
           <div class="panel overlay-panel settings-panel">
             <h2 id="set-h">Settings</h2>
+            <!-- Settings groups; the shared Sound, Language and Report sections (game-options.js) mount at its end. -->
+            <div class="settings-groups" data-options-graphics>
 
             <details open class="set-group">
               <summary>Audio</summary>
@@ -327,7 +329,7 @@
               </div>
             </details>
 
-            <details class="set-group" id="set-gfx-group" data-settings-section="graphics">
+            <details class="set-group" id="set-gfx-group" data-settings-section="graphics" data-i18n-skip>
               <summary id="gfx-title">Graphics</summary>
               <!-- Filled by js/ui/gfx-panel.js (localized controls). -->
               <div class="set-grid gfx-grid" id="gfx-grid"></div>
@@ -407,6 +409,7 @@
               <p class="dim">Erase every local setting, progress record and snapshot for this game.</p>
               <button type="button" class="btn btn-danger" id="btn-wipe">Reset all data</button>
             </details>
+            </div>
 
             <div class="row-end">
               <button type="button" class="btn btn-primary" id="btn-settings-close">Done</button>
@@ -458,7 +461,7 @@
           <div class="panel-wide">
             <h2 id="prof-h">Profile</h2>
             <div class="profile-head">
-              <span class="avatar" id="prof-avatar" aria-hidden="true">G</span>
+              <span class="avatar" id="prof-avatar" aria-hidden="true" data-i18n-skip>G</span>
               <div>
                 <p class="profile-name" id="prof-name">Guest</p>
                 <p class="dim" id="prof-title-line">apprentice</p>
@@ -503,6 +506,9 @@
     <p id="sr-alert" class="visually-hidden" aria-live="assertive" role="alert"></p>
   </div>
 
+  <script src="js/sh-language.js"></script>
+  <script src="js/strings.js"></script>
+  <script src="js/i18n.js"></script>
   <script src="js/starhermit-sdk.js"></script>
   <script type="module" src="js/main.js?v=sh-1"></script>
 </body>

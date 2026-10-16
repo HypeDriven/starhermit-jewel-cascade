@@ -33,6 +33,7 @@ export class Platform {
     this.profile = null; // {displayName, userId} from host when available
     this.syncState = 'offline'; // hosted cloud mirror: offline|saving|synced|error
     this.onSyncChange = null;
+    this.onConflict = null; // fn(cloudDoc) after a save conflict (main.js merges)
   }
 
   /** Running under a StarHermit host shell (the SDK holds a launch token). */
@@ -51,6 +52,16 @@ export class Platform {
     if (this.sh) {
       this.sh.init();
       this.sh.on('saved', (ok) => this._setSync(ok ? 'synced' : 'error'));
+      // The cloud slot changed under this device (another tab or device saved):
+      // load the newer copy (which clears the conflict), let main.js merge it
+      // into local progress, and the merged document saves again.
+      this.sh.on('saveconflict', () => {
+        this._setSync('saving');
+        this.sh.loadJSON().then((doc) => {
+          if (doc && typeof doc === 'object' && this.onConflict) this.onConflict(doc);
+          else this._setSync('error');
+        }).catch(() => this._setSync('error'));
+      });
       this.sh.on('auth', (e) => {
         if (!e.signedIn) { this.profile = null; this.avatarUrl = null; this.online = false; this._setSync('offline'); }
         if (this.onAuthChange) { try { this.onAuthChange(e.signedIn); } catch { /* optional */ } }
@@ -110,7 +121,9 @@ export class Platform {
   async nicknameFor(userId) {
     const id = String(userId);
     const p = this.hosted ? await this.sh.profile(id) : null;
-    return p ? p.displayName.slice(0, 24) : 'Player ' + id.slice(0, 6);
+    if (p) return p.displayName.slice(0, 24);
+    const I18N = typeof window !== 'undefined' ? window.JCI18N : null;
+    return I18N ? I18N.T('Player {id}', { id: id.slice(0, 6) }) : 'Player ' + id.slice(0, 6);
   }
 
   /* ---------------- boards ---------------- */

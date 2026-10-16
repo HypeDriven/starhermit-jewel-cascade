@@ -643,7 +643,7 @@ body.in-game #app-header { display: none; }
   align-items: center;
   margin-block: 0.6rem;
 }
-.set-grid label { color: var(--ink-dim); }
+.set-grid label { color: var(--ink-dim); min-width: 0; overflow-wrap: anywhere; hyphens: auto; }
 .set-grid select, .set-grid input[type="range"] { min-width: 0; max-width: 100%; }
 .gfx-scale { display: flex; align-items: center; gap: 0.6rem; min-width: 0; }
 .gfx-scale input { flex: 1 1 auto; min-width: 0; }
@@ -843,7 +843,7 @@ body.in-game #app-header { display: none; }
     border-block-start: 1px solid var(--panel-line);
     backdrop-filter: blur(6px);
   }
-  .thumb-tray .btn { flex: 1; max-width: 9rem; }
+  .thumb-tray .btn { flex: 1; max-width: 9rem; min-width: 0; padding-inline: 0.3rem; overflow-wrap: anywhere; hyphens: auto; }
   .drawer-tab { top: auto; bottom: calc(6.4rem + var(--sab)); }
   .rail { bottom: calc(7.5rem + var(--sab)); }
   /* lesson banner sits above the thumb tray and drawer tabs, never over them */

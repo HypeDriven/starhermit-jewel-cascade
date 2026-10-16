@@ -37,6 +37,9 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | `js/ui/ui.js` | Screen manager, HUD, mirror board, settings, remapping, gamepad |
 | `js/ui/gfx-panel.js` | Settings → Graphics section (built at runtime, applies live) |
 | `js/ui/gfx-i18n.js` | Graphics panel and StarHermit account strings for the nine required locales, locale picking |
+| `js/sh-language.js` | Shared language resolver (copy of `tools/sh-language.js`): choice → account preference → browser → en-US |
+| `js/strings.js` | Translation tables for every player-facing string (`self.JC_STRINGS`) |
+| `js/i18n.js` | Localization runtime (`window.JCI18N`): `T`/`L`, bound nodes, static-markup relabel, live switching |
 | `js/audio.js` | Buses, recorded one-shots, synth fallbacks, adaptive music, captions |
 | `js/starhermit-sdk.js` | Shared StarHermit client (`window.StarHermit`), an unmodified copy of `tools/starhermit-sdk.js`, loaded before `main.js` |
 | `js/platform.js` | StarHermit adapter over the SDK (profile/avatar, cloud save, settings KV, controls, invite, read-only board, sign-in) plus signed-in time sync; no network at all standalone |
@@ -419,8 +422,9 @@ layouts, never intercepting input). A summary line reads "GPU · cost summary ·
 preset clears overrides; every change applies immediately without reload and is saved in
 `settings.graphics` (older `{tier, renderScale}` settings migrate on load). If the post chain
 cannot be built or throws, the game renders without it and the panel says so. The canvas carries
-`data-gfx-preset`, `data-gfx-auto` and `data-gfx-post` for tests. The panel's strings are
-localized for all nine required locales from `navigator.language`.
+`data-gfx-preset`, `data-gfx-auto` and `data-gfx-post` for tests. The panel's strings exist in
+all nine required locales and follow the game language (§10); a language change relabels the
+panel in place without rebuilding it.
 
 **Visual assets the design calls for:** a title backdrop reading as a lapidary's bench at dusk with
 room for a logo, a results illustration that says "the order was filled" without words, a favicon
@@ -505,17 +509,32 @@ Synth-only by design (no clip, deliberately): jewel fall and spawn ticks (`rules
 
 The product requires en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT.
 
-**Today the game ships English only**, except the Settings → Graphics section, whose strings exist in all nine locales (`js/ui/gfx-i18n.js`, picked from `navigator.language`). `<html lang="en" dir="ltr">` is fixed; outside that section there is no string table and no locale detection. User-facing strings live hard-coded in
-two places: `index.html` (static screen copy) and `js/ui/ui.js` (`INVALID_TEXT` :28,
-`REASON_HEADLINES` :43, `ACTION_LABELS` :75, `COMPONENT_LABELS` :93, `COSMETIC_NAMES` :2019,
-the help cards :1899, and the goal-text builders :128), plus content, theme and achievement names
-in `js/engine/*.js`. Numbers are formatted through `fmtInt`, which is pinned to `'en-US'`.
+Every player-facing string is translated in all nine: static screen copy in `index.html`, all
+UI text in `js/ui/ui.js`, content (lesson names, steps and descriptions, Journey stage names and
+descriptions, practice levels, challenges, the daily and score-chase descriptions), achievement
+and cosmetic names, sound captions, aria-labels and the text board's cell descriptions. English
+source strings are the keys; `js/strings.js` holds the tables (en-GB, es-ES and fr-CA list only
+their differences from en-US, es-419 and fr-FR) and `js/i18n.js` (`window.JCI18N`) resolves them.
+The Graphics panel and StarHermit account strings stay in `js/ui/gfx-i18n.js` and follow the same
+language. Numbers use the active locale's grouping. "Jewel Cascade" and "StarHermit" stay as they
+are.
 
-The layout is already prepared for the work: CSS uses logical properties throughout, there are
-`html[dir="rtl"]` rules for the drawer tabs, and no text is baked into any image — FLUX was never
-asked for words, precisely so key art survives translation. Expansion allowance: German and
-French run ~35% longer than English, so every button, badge and HUD label wraps rather than
-truncating, and the mode cards are already sized for two-line titles. See §17.
+**Language setting.** The shared Settings panel (`game-options.js`) has a Language section,
+reachable from the title nav and from the pause menu during a round. **Automatic** shows the
+language it resolved to; choosing a language applies immediately. Resolution order: the player's
+explicit choice → the StarHermit account's preferred language (`GET /api/v1/me/language`, signed
+in) → `navigator.languages` → en-US (`sh-language.js`). A signed-in choice is saved to the game's
+platform settings as `ui.language`; standalone it is kept on the device. `?lang=<tag>` forces a
+locale for that page load (QA links) and hides the selector.
+
+**Live switching.** A language change sets `<html lang>`, re-renders every bound node in place
+(text and aria-labels of open screens, HUD, objective rail, toasts and the text board), relabels
+the static markup and the Graphics panel, and fires `jc-language`. Nothing is rebuilt or
+restarted: a round in progress keeps playing.
+
+CSS uses logical properties throughout, there are `html[dir="rtl"]` rules for the drawer tabs,
+and no text is baked into any image. German and French run ~35% longer than English, so buttons,
+settings labels, the thumb tray and the mode cards wrap rather than truncate.
 
 ---
 
@@ -566,7 +585,10 @@ out, the cloud status reads offline and play continues locally.
 | Sign-in | `StarHermit.signIn()` | On `<id>.starhermit.com` without a token the title shows **Sign in with StarHermit**; hidden when signed in and when running locally |
 | Time sync | `GET /api/v1/time` | Signed in only: round-trip-adjusted offset (`serverTime`/`now`/`time`); standalone uses the local clock |
 | Profile | `StarHermit.profile()`, `avatarUrl()` | Nickname (never `/me`, never usernames; `"Player " + id` fallback) on the Profile chip and screen; the avatar replaces the initial on the Profile screen |
-| Cloud save | slot `game:<slug>` via the SDK | Saves debounced 2 s and flushed with keepalive on `pagehide`; the remote doc wins unless the local `_savedAt` (stamped on every progress save, never at boot) is strictly newer; sync status on the profile chip/screen; `localStorage` stays the offline cache |
+| Cloud save | slot `game:<slug>` via the SDK | Saves debounced 2 s and flushed with keepalive on `pagehide`; writes are conditional on the slot's version; at boot the remote doc wins unless the local `_savedAt` (stamped on every progress save, never at boot) is strictly newer; sync status on the profile chip/screen; `localStorage` stays the offline cache |
+| Save conflict | SDK `saveconflict` | When another device or tab saved first, the newer cloud doc is loaded (`loadJSON`) and merged into local progress (`storage.mergeProgress`: stars, unlocks, mastery XP, career counters, daily bests take the higher value; achievements, tutorials, cosmetics and seen rounds are unions with the earliest unlock date; the current win and daily streaks come from the newer side), stored locally and saved again; a toast confirms |
+| Language | `sh-language.js`, `GET /api/v1/me/language`, setting `ui.language` | See §10 |
+| Report a problem | shared panel, `POST /api/v1/games/<slug>/reports` | Signed in: the Settings panel's **Report a problem** section sends a bug report; uncaught errors are sent as crash reports (`captureCrashes`, capped by the SDK) |
 | Settings KV | `patchSettings` / `getSettings` | Every settings change is mirrored (600 ms debounce); at boot the platform values are merged over the local settings |
 | Controls | `loadBindings`, `setControl`, `resetControls` | Keyboard routing by `event.code`; Settings → Controls remaps persist to the platform (§6) |
 | Invite link | `StarHermit.inviteLink()` | **Invite a friend** on the title (signed in only) copies the link and confirms with a toast |
@@ -574,7 +596,7 @@ out, the cloud status reads offline and play continues locally.
 | Score submit | `StarHermit.submitScores()` | Every finished ranked round (Daily, Challenge, Score chase) posts its score to the `high-score` board (a practice session whose `score-script.js` range-checks it: integer, higher is better, 0–1,000,000); the results screen shows "Posting score…", then "Leaderboard rank: #N" (or posted / not posted). Practice, Learn and Journey post nothing |
 
 Account strings (sign-in, invite, toasts, leaderboard line) are localized in the nine locales (`SH_STRINGS` in
-`js/ui/gfx-i18n.js`).
+`js/ui/gfx-i18n.js`) and follow the game language.
 
 **Standalone (no launch token) makes no network request.** No `/api` or `/ws` route is called:
 local clock, boards = personal bests in `localStorage`, achievements and progress local, no
@@ -647,7 +669,10 @@ read-only, to read `legalActions(state)` and poll session status, never to mutat
 
 ## 14. Testing and acceptance criteria
 
-`npm test` → `node tests/run.mjs` then `node --test tests/gfx.test.mjs tests/platform.test.mjs`
+`npm test` → `node tests/run.mjs` then `node --test tests/gfx.test.mjs tests/platform.test.mjs tests/i18n.test.mjs`
+(`i18n.test.mjs`: every key used by code, markup and content is translated in every locale with
+placeholders intact, and the language follows `sh-language.js` and switches live;
+`platform.test.mjs` also covers the save-conflict merge)
 (GPU-string detection, mobile cap, `resolve()` presets/overrides/scale clamp, preset clears
 overrides, settings migration, cost summary, and every graphics string present in all nine
 locales; `js/platform.js` over the SDK with a stubbed fetch: token read and stripped, nickname,
@@ -666,7 +691,7 @@ full lesson round and a timed round expiring; and three server tests covering co
 canonicalization, replay verification and submission validation.
 
 `npm run test:e2e` → `tests/e2e.mjs`, run at **1280×800** and at **390×844 with touch**, failing on
-any `pageerror`, console error or console warning (GPU/SwiftShader noise excepted), or on any same-origin `/api` or `/ws` request while standalone. Eleven steps:
+any `pageerror`, console error or console warning (GPU/SwiftShader noise excepted), or on any same-origin `/api` or `/ws` request while standalone. Twelve steps:
 boot → title → **Settings → Graphics** (Auto shows the detected Low; switch Low → Ultra → High,
 checking `data-gfx-preset`/`data-gfx-post` on the canvas; override bloom off and show the frame
 rate; check the summary; reload and confirm preset and override persisted; back to Auto clears the
@@ -676,7 +701,10 @@ resume → up to 45 swaps to the end of the round (failing if a `ready` board ev
 actions) → results → back to mode select → StarHermit: standalone makes no platform call and shows
 no account buttons; a `#game_token=` launch against a stubbed API (`page.route`) shows the
 nickname on the Profile chip, strips the token, loads `game:<slug>`, and Invite a friend shows a
-toast. Screenshots at each stage.
+toast → Language: with the account's preferred language stubbed to fr-CA, the page loads in
+French and Automatic reads "Automatique — Français (Canada)"; choosing Italian re-renders the open
+Settings panel and the title chips live and saves `ui.language`; Report a problem posts a report;
+back to Automatic. Screenshots at each stage.
 
 ### QA bar, as checkable statements
 
@@ -716,8 +744,6 @@ toast. Screenshots at each stage.
 
 ## 16. Known limitations
 
-- **No localization.** English only; see §10 and §17. This is the largest gap against the product
-  requirements.
 - **Creation cells earn no jewel credit.** A 4-run of a goal colour credits 3 towards a collect
   goal, and a 5-run credits 4, because the cell that becomes the special is never removed. This is
   consistent and deliberate but is not explained anywhere in the UI.
@@ -746,19 +772,13 @@ toast. Screenshots at each stage.
 
 ## 17. Design intent not yet implemented
 
-1. **Nine locales.** The design calls for en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR
-   and it-IT. The intended shape: a `js/i18n.js` string table keyed by the ids already implicit in
-   `INVALID_TEXT` / `REASON_HEADLINES` / `ACTION_LABELS` / `COMPONENT_LABELS` / `COSMETIC_NAMES`,
-   locale chosen from an explicit setting falling back to `navigator.languages`, `<html lang>` set
-   at boot, and `fmtInt` taking the active locale instead of the pinned `'en-US'`. No image or
-   audio asset contains text, so nothing else needs re-authoring.
-2. **Leaderboard reads on the Boards screen.** `platform.fetchBoards()` and `fetchFriends()` exist
+1. **Leaderboard reads on the Boards screen.** `platform.fetchBoards()` and `fetchFriends()` exist
    and the server serves `GET /boards` and `GET /friends`, but the tab panel is populated from the
    local `jewelcascade.boards` cache; wiring the live fetch is intended.
-3. **`tutorial_step` and `settings_change` funnel events** are whitelisted in `analytics.js` and
+2. **`tutorial_step` and `settings_change` funnel events** are whitelisted in `analytics.js` and
    are intended to be emitted from the UI layer; today only `start`, `retry`, `round_end` and
    `error` fire.
-4. **A distinct `time-expired` cue.** Timed rounds currently end on `level-fail.opus`; the design
+3. **A distinct `time-expired` cue.** Timed rounds currently end on `level-fail.opus`; the design
    wants the clock running out to sound different from running out of moves.
 
 ## Browser interference

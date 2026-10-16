@@ -232,3 +232,68 @@ export function wipeAll() {
   }
   for (const k of keys) store.removeItem(k);
 }
+
+/* ------------------------------------------------------------------ *
+ *  Cloud conflict merge
+ * ------------------------------------------------------------------ */
+
+/**
+ * Merge a cloud progression document into the local one in place (used when
+ * the cloud slot changed under this device: save conflict). Nothing earned on
+ * either side is lost: stars, unlocks, mastery, counters and daily bests take
+ * the higher value; achievements, tutorials and cosmetics are unions (earliest
+ * unlock date); the current win and daily streaks come from the newer side.
+ */
+export function mergeProgress(local, remote) {
+  if (!remote || typeof remote !== 'object') return local;
+  const d = defaultProgress();
+  const maxMap = (a = {}, b = {}) => {
+    const out = { ...a };
+    for (const [k, v] of Object.entries(b)) if (typeof v === 'number' && !(out[k] >= v)) out[k] = v;
+    return out;
+  };
+  const num = (v) => (typeof v === 'number' && isFinite(v) ? v : 0);
+  const remoteNewer = (remote._savedAt || '') > (local._savedAt || '');
+  local.journeyStars = maxMap(local.journeyStars, remote.journeyStars);
+  local.journeyUnlocked = Math.max(num(local.journeyUnlocked) || 1, num(remote.journeyUnlocked));
+  local.tutorialsDone = { ...(remote.tutorialsDone || {}), ...(local.tutorialsDone || {}) };
+  local.challengesDone = maxMap(local.challengesDone, remote.challengesDone);
+  const ach = { ...(local.achievements || {}) };
+  for (const [k, v] of Object.entries(remote.achievements || {})) {
+    if (!ach[k] || (v && v.at && String(v.at) < String(ach[k].at || '~'))) ach[k] = v;
+  }
+  local.achievements = ach;
+  local.masteryXp = Math.max(num(local.masteryXp), num(remote.masteryXp));
+  const lc = { ...d.career, ...(local.career || {}) };
+  const rc = { ...d.career, ...(remote.career || {}) };
+  local.career = {
+    roundsCompleted: Math.max(num(lc.roundsCompleted), num(rc.roundsCompleted)),
+    roundsWon: Math.max(num(lc.roundsWon), num(rc.roundsWon)),
+    winStreak: remoteNewer ? num(rc.winStreak) : num(lc.winStreak),
+    bestWinStreak: Math.max(num(lc.bestWinStreak), num(rc.bestWinStreak)),
+    specialsMade: {
+      ray: !!(lc.specialsMade && lc.specialsMade.ray) || !!(rc.specialsMade && rc.specialsMade.ray),
+      bloom: !!(lc.specialsMade && lc.specialsMade.bloom) || !!(rc.specialsMade && rc.specialsMade.bloom),
+      prism: !!(lc.specialsMade && lc.specialsMade.prism) || !!(rc.specialsMade && rc.specialsMade.prism),
+    },
+    totalScore: Math.max(num(lc.totalScore), num(rc.totalScore)),
+  };
+  const seen = [...(remote.seenRounds || []), ...(local.seenRounds || [])];
+  local.seenRounds = [...new Set(seen)].slice(-256);
+  const ld = { ...d.daily, ...(local.daily || {}) };
+  const rd = { ...d.daily, ...(remote.daily || {}) };
+  const later = (rd.lastPlayed || '') > (ld.lastPlayed || '') ? rd : ld;
+  local.daily = {
+    lastPlayed: later.lastPlayed || null,
+    streak: (rd.lastPlayed || '') === (ld.lastPlayed || '') ? Math.max(num(ld.streak), num(rd.streak)) : num(later.streak),
+    best: maxMap(ld.best, rd.best),
+  };
+  local.practice = { ...d.practice, ...(local.practice || {}), plays: Math.max(num(local.practice && local.practice.plays), num(remote.practice && remote.practice.plays)) };
+  const cos = {};
+  for (const k of Object.keys(d.cosmeticsUnlocked)) {
+    cos[k] = [...new Set([...((local.cosmeticsUnlocked || {})[k] || d.cosmeticsUnlocked[k]), ...((remote.cosmeticsUnlocked || {})[k] || [])])];
+  }
+  local.cosmeticsUnlocked = cos;
+  if (remoteNewer) local._savedAt = remote._savedAt;
+  return local;
+}

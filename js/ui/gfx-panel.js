@@ -11,16 +11,25 @@ import { GFX_STRINGS, pickLocale } from './gfx-i18n.js';
 export function initGraphicsPanel({ settings, storage, scene, applyGraphics, onChange }) {
   const grid = document.getElementById('gfx-grid');
   if (!grid) return { sync() {} };
-  let locale = 'en-US';
-  try {
-    locale = pickLocale(navigator.language);
-  } catch {
-    /* default */
-  }
-  const L = GFX_STRINGS[locale];
+  // Follows the game language (js/i18n.js); relabel() updates the labels in
+  // place — the panel is never rebuilt, so the shared sections mounted beside
+  // it stay put.
+  const currentLocale = () => {
+    try {
+      return pickLocale(window.JCI18N ? window.JCI18N.lang : navigator.language);
+    } catch {
+      return 'en-US';
+    }
+  };
+  let L = GFX_STRINGS[currentLocale()];
   const group = document.getElementById('set-gfx-group');
-  group.lang = locale;
-  document.getElementById('gfx-title').textContent = L.title;
+  const labels = []; // [node, (L) => text]
+  const label = (node, fn) => {
+    labels.push([node, fn]);
+    node.textContent = fn(L);
+    return node;
+  };
+  label(document.getElementById('gfx-title'), (S) => S.title);
 
   const el = (tag, attrs = {}, text) => {
     const e = document.createElement(tag);
@@ -28,36 +37,36 @@ export function initGraphicsPanel({ settings, storage, scene, applyGraphics, onC
     if (text !== undefined) e.textContent = text;
     return e;
   };
-  const row = (id, label, control) => {
-    grid.append(el('label', { for: id }, label), control);
+  const row = (id, fn, control) => {
+    grid.append(label(el('label', { for: id }), fn), control);
   };
 
   const preset = el('select', { id: 'gfx-preset', 'data-gfx': 'preset' });
-  row('gfx-preset', L.quality, preset);
+  row('gfx-preset', (S) => S.quality, preset);
 
   const scaleWrap = el('div', { class: 'gfx-scale' });
   const scale = el('input', { type: 'range', id: 'gfx-scale', min: '50', max: '200', step: '5', 'data-gfx': 'render_scale' });
   const scaleOut = el('output', { id: 'gfx-scale-val', for: 'gfx-scale' });
   scaleWrap.append(scale, scaleOut);
-  row('gfx-scale', L.renderScale, scaleWrap);
+  row('gfx-scale', (S) => S.renderScale, scaleWrap);
 
   const catSelects = {};
   for (const [cat, tiers] of Object.entries(CATEGORIES)) {
     const sel = el('select', { id: `gfx-${cat}`, 'data-gfx': cat });
     sel.append(el('option', { value: 'preset' }, ''));
-    for (const t of tiers) sel.append(el('option', { value: t }, L.tiers[t] || t));
+    for (const t of tiers) sel.append(label(el('option', { value: t }), (S) => S.tiers[t] || t));
     catSelects[cat] = sel;
-    row(sel.id, L.cats[cat], sel);
+    row(sel.id, (S) => S.cats[cat], sel);
   }
 
   const adaptive = el('input', { type: 'checkbox', id: 'gfx-adaptive', 'data-gfx': 'adaptive' });
-  row('gfx-adaptive', L.adaptive, adaptive);
+  row('gfx-adaptive', (S) => S.adaptive, adaptive);
   const showFps = el('input', { type: 'checkbox', id: 'gfx-show-fps', 'data-gfx': 'show_fps' });
-  row('gfx-show-fps', L.showFps, showFps);
+  row('gfx-show-fps', (S) => S.showFps, showFps);
 
   const summary = document.getElementById('gfx-summary');
   const note = document.getElementById('gfx-post-note');
-  note.textContent = L.postNote;
+  label(note, (S) => S.postNote);
 
   const detected = () => (scene ? scene.detected : 'balanced');
 
@@ -133,6 +142,12 @@ export function initGraphicsPanel({ settings, storage, scene, applyGraphics, onC
     if (group.open && group.offsetParent !== null) refreshSummary();
   }, 1000);
 
+  function relabel() {
+    L = GFX_STRINGS[currentLocale()];
+    for (const [node, fn] of labels) node.textContent = fn(L);
+    sync();
+  }
+
   sync();
-  return { sync, refreshSummary };
+  return { sync, refreshSummary, relabel };
 }

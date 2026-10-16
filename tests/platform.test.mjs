@@ -9,6 +9,7 @@ const sdkModule = { exports: {} };
 new Function('module', 'exports', readFileSync(new URL('../js/starhermit-sdk.js', import.meta.url), 'utf8'))(sdkModule, sdkModule.exports);
 const SDK = sdkModule.exports;
 const { Platform } = await import('../js/platform.js');
+const storage = await import('../js/storage.js');
 
 const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
 const token = () => 'h.' + b64u({ sub: 'user-123456789', game_scope: 'gid-1', exp: Math.floor(Date.now() / 1000) + 3600 }) + '.s';
@@ -23,7 +24,8 @@ function backend() {
     const r = (st, b) => new Response(b, { status: st });
     if (url.includes('/cloud-saves/')) {
       const key = decodeURIComponent(url.split('/cloud-saves/')[1]);
-      if (method === 'PUT') { saves[key] = Buffer.from(body.dataBase64, 'base64'); return r(200, '{}'); }
+      if (key.endsWith('/info')) return r(200, JSON.stringify({ exists: !!saves[key.slice(0, -5)] }));
+      if (method === 'PUT') { saves[key] = Buffer.from(body.dataBase64, 'base64'); return r(200, JSON.stringify({ etag: '"v' + calls.length + '"' })); }
       return saves[key] ? r(200, saves[key]) : r(404, '');
     }
     if (url.endsWith('/time')) return r(200, JSON.stringify({ now: Date.now() }));
@@ -116,7 +118,7 @@ test('standalone: no network calls at all', async () => {
 });
 
 test('hosted domain without a token offers sign-in', async () => {
-  install('', async () => { throw new Error('offline'); }, 'gid-1.starhermit.com');
+  install('', async () => { throw new Error('offline'); }, '0b9d6f2e-3c4a-4e5b-9a7c-1d2e3f405162.starhermit.com');
   const p = new Platform();
   await p.init();
   assert.equal(p.hosted, false);
@@ -130,4 +132,45 @@ test('leaderboard line strings in every locale', async () => {
     for (const k of ['lbPosting', 'lbRank', 'lbPosted', 'lbNotPosted']) assert.ok(t[k], l + ' ' + k);
     assert.ok(t.lbRank.includes('{rank}'));
   }
+});
+
+test("save conflict: the other device's progress is reloaded, merged and saved again", async () => {
+  const remoteDoc = { ...storage.defaultProgress(), journeyStars: { j1: 3, j2: 1 }, journeyUnlocked: 3, masteryXp: 900, achievements: { first_setting: { at: '2026-10-01T00:00:00Z' } }, tutorialsDone: { t1: true }, _savedAt: '2026-10-05T00:00:00Z' };
+  const zipSdk = SDK.create({ window: { location: { hash: '', search: '', pathname: '/', origin: 'https://x', hostname: 'x', href: 'https://x/' }, history: { replaceState() {} } }, fetch: async () => new Response('', { status: 404 }) });
+  const remoteBytes = await zipSdk._zip('save.json', new TextEncoder().encode(JSON.stringify(remoteDoc)));
+  let conflictOnce = true;
+  const puts = [];
+  const fetch = async (url, init = {}) => {
+    const method = init.method || 'GET';
+    if (url.endsWith('/info')) return new Response(JSON.stringify({ exists: true, etag: conflictOnce ? '"v1"' : '"v2"' }), { status: 200 });
+    if (url.includes('/cloud-saves/') && method === 'GET') return new Response(remoteBytes, { status: 200 });
+    if (url.includes('/cloud-saves/') && method === 'PUT') {
+      if (conflictOnce) { conflictOnce = false; return new Response(JSON.stringify({ error: 'conflict', etag: '"v2"' }), { status: 412 }); }
+      puts.push(JSON.parse(init.body)); return new Response(JSON.stringify({ etag: '"v3"' }), { status: 200 });
+    }
+    if (url.endsWith('/profile')) return new Response(JSON.stringify({ nickname: 'Al' }), { status: 200 });
+    return new Response('', { status: 404 });
+  };
+  const { sdk } = install('#game_token=' + token(), fetch);
+  const p = new Platform();
+  await p.init();
+  const local = { ...storage.defaultProgress(), journeyStars: { j1: 1, j3: 2 }, journeyUnlocked: 4, masteryXp: 300, achievements: { steady_hands: { at: '2026-10-04T00:00:00Z' } }, _savedAt: '2026-10-04T00:00:00Z' };
+  const merged = new Promise((resolve) => {
+    p.onConflict = (doc) => {
+      storage.mergeProgress(local, doc);
+      p.queueCloudSave(local);
+      p.flushCloudSave().then(() => resolve(local));
+    };
+  });
+  await p.cloudLoad();
+  p.queueCloudSave(local);
+  p.flushCloudSave();
+  const progress = await merged;
+  assert.deepEqual(progress.journeyStars, { j1: 3, j2: 1, j3: 2 });
+  assert.equal(progress.journeyUnlocked, 4);
+  assert.equal(progress.masteryXp, 900);
+  assert.deepEqual(Object.keys(progress.achievements).sort(), ['first_setting', 'steady_hands']);
+  assert.ok(progress.tutorialsDone.t1);
+  assert.equal(puts.length, 1, 'merged save written once');
+  sdk.signOut();
 });

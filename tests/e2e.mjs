@@ -326,6 +326,37 @@ async function runPass(browser, vp) {
       await page.screenshot({ path: SHOT('signed-in', vp.name) });
       await page.unroute(/\/api\/v1\//);
     });
+
+    await step('Language: Automatic follows the StarHermit preferred language; explicit choice re-renders live and syncs to ui.language; report a problem', async () => {
+      const calls = await stubStarHermit(page, { preferredLanguage: 'fr-CA' });
+      await page.goto('about:blank');
+      await page.goto(vp.base + '/index.html#game_token=' + launchToken(), { waitUntil: 'load', timeout: 30000 });
+      await page.waitForSelector(screenVisible('title'), { timeout: 15000 });
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+      await page.click('.nav-btn[data-nav="settings"]');
+      await page.waitForSelector(screenVisible('settings'), { timeout: 5000 });
+      if ((await page.locator('#set-h').textContent()) !== 'Paramètres') throw new Error('settings not in French');
+      const choice = page.locator('[data-game-language="choice"]');
+      await choice.scrollIntoViewIfNeeded();
+      if (!/^Automatique — Français \(Canada\)$/.test(await choice.locator('option').first().textContent())) throw new Error('Automatic label not resolved');
+      await choice.selectOption('it-IT');
+      await page.waitForFunction(() => document.documentElement.lang === 'it-IT');
+      await page.waitForFunction(() => /Salvato/.test(document.querySelector('[data-game-language="status"]').textContent));
+      if (calls.settings['ui.language']?.choice !== 'it-IT') throw new Error('ui.language not saved: ' + JSON.stringify(calls.settings));
+      if ((await page.locator('#set-h').textContent()) !== 'Impostazioni') throw new Error('settings title not re-rendered');
+      if (!/^Tappa \d+ di 40/.test(await page.locator('#chip-journey-sub').textContent())) throw new Error('title chip not re-rendered');
+      await page.locator('[data-game-report="title"]').scrollIntoViewIfNeeded();
+      await page.fill('[data-game-report="title"]', 'Test report');
+      await page.click('[data-game-report="send"]');
+      await page.waitForFunction(() => /Grazie/.test(document.querySelector('[data-game-report="status"]').textContent));
+      if (!calls.reports?.[0] || calls.reports[0].kind !== 'bug') throw new Error('report not posted');
+      await page.screenshot({ path: SHOT('language', vp.name) });
+      await choice.selectOption('auto');
+      await page.waitForFunction(() => document.documentElement.lang === 'fr-CA');
+      await page.click('#btn-settings-close');
+      await page.waitForSelector('[data-screen="settings"]', { state: 'hidden', timeout: 5000 });
+      await page.unroute(/\/api\/v1\//);
+    });
   } finally {
     if (errors.length) {
       throw new Error(`[${vp.name}] console/page errors during pass:\n  ${errors.join('\n  ')}`);
