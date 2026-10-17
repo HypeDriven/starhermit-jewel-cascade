@@ -13,6 +13,7 @@ const en = {
   adaptive: 'Adaptive resolution',
   showFps: 'Show frame rate',
   postNote: 'Post-processing is unavailable on this device, so effects that need it are off.',
+  level: 'Level {n}',
   presets: { low: 'Low', balanced: 'Balanced', high: 'High', ultra: 'Ultra' },
   cats: {
     shadows: 'Shadows',
@@ -50,6 +51,7 @@ const es = {
   adaptive: 'Resolución adaptativa',
   showFps: 'Mostrar fotogramas por segundo',
   postNote: 'El posprocesado no está disponible en este dispositivo; los efectos que lo necesitan están desactivados.',
+  level: 'Nivel {n}',
   presets: { low: 'Baja', balanced: 'Equilibrada', high: 'Alta', ultra: 'Ultra' },
   cats: {
     shadows: 'Sombras',
@@ -90,6 +92,7 @@ const de = {
   adaptive: 'Adaptive Auflösung',
   showFps: 'Bildrate anzeigen',
   postNote: 'Nachbearbeitung ist auf diesem Gerät nicht verfügbar; Effekte, die sie benötigen, sind aus.',
+  level: 'Stufe {n}',
   presets: { low: 'Niedrig', balanced: 'Ausgewogen', high: 'Hoch', ultra: 'Ultra' },
   cats: {
     shadows: 'Schatten',
@@ -122,6 +125,7 @@ const fr = {
   adaptive: 'Résolution adaptative',
   showFps: 'Afficher la fréquence d’images',
   postNote: 'Le post-traitement n’est pas disponible sur cet appareil ; les effets qui en dépendent sont désactivés.',
+  level: 'Niveau {n}',
   presets: { low: 'Basse', balanced: 'Équilibrée', high: 'Haute', ultra: 'Ultra' },
   cats: {
     shadows: 'Ombres',
@@ -159,6 +163,7 @@ const ptBR = {
   adaptive: 'Resolução adaptativa',
   showFps: 'Mostrar taxa de quadros',
   postNote: 'O pós-processamento não está disponível neste dispositivo; os efeitos que dependem dele estão desativados.',
+  level: 'Nível {n}',
   presets: { low: 'Baixa', balanced: 'Equilibrada', high: 'Alta', ultra: 'Ultra' },
   cats: {
     shadows: 'Sombras',
@@ -191,6 +196,7 @@ const it = {
   adaptive: 'Risoluzione adattiva',
   showFps: 'Mostra frequenza fotogrammi',
   postNote: 'La post-elaborazione non è disponibile su questo dispositivo; gli effetti che la richiedono sono disattivati.',
+  level: 'Livello {n}',
   presets: { low: 'Bassa', balanced: 'Bilanciata', high: 'Alta', ultra: 'Ultra' },
   cats: {
     shadows: 'Ombre',

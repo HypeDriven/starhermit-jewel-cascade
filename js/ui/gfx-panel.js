@@ -76,7 +76,7 @@ export function initGraphicsPanel({ settings, storage, scene, applyGraphics, onC
       return;
     }
     const info = scene.graphicsInfo(L.words);
-    summary.textContent = `${info.gpu} · ${info.summary}`;
+    summary.textContent = [info.gpu, info.level != null ? L.level.replace('{n}', info.level) : null, info.summary].filter(Boolean).join(' · ');
     summary.dataset.preset = info.resolved.preset;
     note.hidden = !info.postFailed;
   }

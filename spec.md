@@ -33,7 +33,8 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | `js/engine/rng.js` | mulberry32 `Rng`, FNV-1a hashing, stable stringify |
 | `js/engine/achievements.js` | 5 achievements, career counters, 10 mastery levels |
 | `js/render/scene.js` | Three.js scene, board build, event-driven animation timeline, particles, IBL, post chain, adaptive resolution |
-| `js/render/gfx.js` | Pure graphics quality model: presets, categories, GPU detection, `resolve()`, `describe()`, settings migration |
+| `js/render/gfx.js` | Pure graphics quality model: presets, categories, hardware-level detection (`detectLevel`, `presetForLevel`, `detectPreset`), per-preset `BUDGETS`/`budgetFor`, `resolve()`, `describe()`, settings migration |
+| `js/render/gpu-level.js` | Shared StarHermit hardware-level module (`window.StarHermitGpu`, classic script loaded before `js/main.js`), copied from the platform tools, never edited here |
 | `js/ui/ui.js` | Screen manager, HUD, mirror board, settings, remapping, gamepad |
 | `js/ui/gfx-panel.js` | Settings → Graphics section (built at runtime, applies live) |
 | `js/ui/gfx-i18n.js` | Graphics panel and StarHermit account strings for the nine required locales, locale picking |
@@ -403,28 +404,58 @@ when image-based lighting is on. Reflections come from a `PMREMGenerator`-filter
 as `scene.environment`, with per-material strengths (gems 0.3, cells 0.2, brass 0.6–0.7, table
 0.12). Surface detail adds procedural canvas textures — straight walnut grain on the table,
 bevelled tile faces on the cells, brushed-brass roughness on the frame and rim — plus gem clearcoat
-and the table-top prop gems. Particle bursts use a soft round additive sprite; with an animated
+(High/Ultra budget) and the table-top prop gems. Particle bursts use a soft round additive sprite; with an animated
 background, a few four-point glints twinkle on random settled jewels, stars shimmer, dust drifts
 and lamps sway and flicker (all stopped by reduced motion). The optional post chain is
 `RenderPass → GTAO → UnrealBloom (strength 0.45, threshold 0.92: lamps, glints, specials and
 specular highlights only) → OutputPass → colour grade (gentle S-curve, +12% saturation, warm
 highlights / violet shadows, vignette) → SMAA or FXAA`; MSAA uses a 4-sample target (or the
 canvas's own MSAA without post). Special overlays glow 1.7× brighter when bloom is on. The
-**Settings → Graphics** section offers a quality preset (Auto, chosen from the WebGL unmasked
-renderer string — SwiftShader/llvmpipe get Low, discrete GPUs and Apple M get High, everything else
-Balanced, and touch/mobile devices are capped at Balanced; Low; Balanced; High; Ultra), a render
+**Settings → Graphics** section offers a quality preset (Auto, chosen from the StarHermit
+hardware level below; Low; Balanced; High; Ultra), a render
 scale (50–200% of the preset's), one override per effect with "From preset (…)" as the default —
 shadows off/low/medium/high (512/1024/2048² maps), ambient occlusion off/on/high, bloom, colour
 grade, anti-aliasing off/FXAA/SMAA/MSAA, reflections, particles low/medium/high, background motion
 static/animated and surface detail plain/detailed — plus adaptive resolution (on by default) and a
 frame-rate readout (off by default; bottom-left on desktop, under the status bar on compact
-layouts, never intercepting input). A summary line reads "GPU · cost summary · W×H px". Choosing a
+layouts, never intercepting input). A summary line reads "GPU · Level N · cost summary · W×H px" ("Level" localized). Choosing a
 preset clears overrides; every change applies immediately without reload and is saved in
 `settings.graphics` (older `{tier, renderScale}` settings migrate on load). If the post chain
 cannot be built or throws, the game renders without it and the panel says so. The canvas carries
 `data-gfx-preset`, `data-gfx-auto` and `data-gfx-post` for tests. The panel's strings exist in
 all nine required locales and follow the game language (§10); a language change relabels the
 panel in place without rebuilding it.
+
+**Hardware-level detection.** `js/render/gpu-level.js` (shared StarHermit copy, `window.StarHermitGpu`)
+rates the WebGL unmasked renderer plus device facts (`detectSystem()`) on the StarHermit hardware level
+0–20 (0 = Galaxy S20 / Intel UHD or weaker and every software renderer, 20 = RTX 5090, each level ≈
+1.23×; laptop parts two levels below desktop; phones, tablets and ≤ 4 GB machines capped at 9).
+`gfx.js` maps it with `presetForLevel(level, { low: 0, balanced: 4, high: 10, ultra: 17 })`, so Auto
+picks Ultra on strong GPUs; adaptive resolution still steps down when slow. Headless SwiftShader is
+level 0 → Low. Phones and tablets pace Auto FPS at half the display refresh rate ("Auto (half refresh
+rate)") and start at 16 simultaneous sounds (shared `game-options.js`).
+
+**Per-preset budgets** (`BUDGETS` / `budgetFor` in `js/render/gfx.js`; each preset holds 60 FPS on the
+weakest GPU Auto gives it — Low at level 0, Balanced 4, High 10, Ultra 17). Spark and dust counts are
+tuned at the floor level and scale up within the preset on faster GPUs (`StarHermitGpu.scaleBudget`,
+≤ 2×). Textures are regenerated at the new size when the budget changes.
+
+| Budget | Low | Balanced | High | Ultra |
+|---|---|---|---|---|
+| Frosted (backdrop-filter) header, HUD, rails, overlays and thumb tray over the board | no | no | yes | yes |
+| Gem clearcoat (Surface detail on) | no | no | yes | yes |
+| Table wood / tile / brushed-metal textures | 128 / 32 / 64 | 256 / 64 / 128 | 512 / 128 / 256 | 1024 / 256 / 512 |
+| Live-spark cap at Particles "high" (medium ½, low ¼) | 2048 | 2048 | 2048 | 3072 |
+| Dust motes at Particles "high" (medium ½, low none) | 90 | 170 | 170 | 260 |
+| Bloom / GTAO resolution | ½ / ½ | ½ / ½ | ½ / ½ | full / full |
+
+**Benchmark** (`node tools/gfx-bench.mjs jewel-cascade`; hook `tests/gfx-bench.mjs` picks the preset in
+Settings → Graphics, starts a Practice (Easy) round and keeps swapping jewels with real clicks on the
+board, retrying from the results). Measured 2026-10-17 (AMD Radeon iGPU level 2 GPU time minus the same
+page with draws skipped, projected to the preset's floor level; RTX 5090 CPU time):
+
+- Desktop 1920×1080: PASS low (typical 0.92 / slow 2.72 ms at level 0, CPU p90 0.80 ms); PASS balanced (3.32 / 5.23 ms at level 4, CPU 1.60 ms); PASS high (2.63 / 3.25 ms at level 10, CPU 2.40 ms); PASS ultra (3.91 / 4.00 ms at level 17, CPU 3.90 ms).
+- Mobile 390×844 @3×: PASS low (0.00 / 0.81 ms at level 0, CPU 0.90 ms); PASS balanced (0.00 / 0.40 ms at level 4, CPU 2.10 ms).
 
 **Visual assets the design calls for:** a title backdrop reading as a lapidary's bench at dusk with
 room for a logo, a results illustration that says "the order was filled" without words, a favicon
@@ -651,7 +682,8 @@ probe-deserializes to a `ready` state.
 
 **Performance budgets.** Presets Low/Balanced/High/Ultra cap the device pixel ratio at 1/1.5/2/2
 (Ultra renders at 1.25× on top); pixel ratio = min(dpr, cap) × preset scale × render scale ×
-adaptive scale. Particle tiers set pool caps 512/1024/2048, dust 0/90/170 and idle glints 0/6/14;
+adaptive scale. Particle tiers and the preset's budget set the live-spark cap, the dust count (above) and idle glints
+0/6/14;
 shadow maps are 0/512/1024/2048. Low renders straight to the canvas (no composer, no shadows, no
 IBL, no props, static background), so it costs no more than the old low tier. Adaptive resolution
 averages 90 frames: over 26 ms it steps the scale down 0.1 (floor 0.6), under 14 ms back up 0.05
@@ -673,7 +705,9 @@ read-only, to read `legalActions(state)` and poll session status, never to mutat
 (`i18n.test.mjs`: every key used by code, markup and content is translated in every locale with
 placeholders intact, and the language follows `sh-language.js` and switches live;
 `platform.test.mjs` also covers the save-conflict merge)
-(GPU-string detection, mobile cap, `resolve()` presets/overrides/scale clamp, preset clears
+(hardware level → preset: SwiftShader/llvmpipe, AMD Radeon Graphics and Intel UHD → Low, Iris Xe →
+Balanced, GTX 1070 → High, RTX 4080/5090 → Ultra, phones such as Adreno 740 capped at Balanced; the
+per-preset budget table; `resolve()` presets/overrides/scale clamp, preset clears
 overrides, settings migration, cost summary, and every graphics string present in all nine
 locales; `js/platform.js` over the SDK with a stubbed fetch: token read and stripped, nickname,
 cloud save round-trip through `game:<slug>`, settings PATCH, `setControl`/`resetControls`
@@ -694,7 +728,7 @@ canonicalization, replay verification and submission validation.
 any `pageerror`, console error or console warning (GPU/SwiftShader noise excepted), or on any same-origin `/api` or `/ws` request while standalone. Twelve steps:
 boot → title → **Settings → Graphics** (Auto shows the detected Low; switch Low → Ultra → High,
 checking `data-gfx-preset`/`data-gfx-post` on the canvas; override bloom off and show the frame
-rate; check the summary; reload and confirm preset and override persisted; back to Auto clears the
+rate; check the summary, including "Level 0"; reload and confirm preset and override persisted; back to Auto clears the
 override) → mode select → practice setup (Easy) → countdown to active → hint and undo (asserting
 `movesLeft` actually increased) → a keyboard-only swap on the text board → pause → settings →
 resume → up to 45 swaps to the end of the round (failing if a `ready` board ever has zero legal

@@ -40,7 +40,7 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { SMAAPass } from 'three/addons/postprocessing/SMAAPass.js';
 import { FXAAShader } from 'three/addons/shaders/FXAAShader.js';
 import { RoomEnvironment } from 'three/addons/environments/RoomEnvironment.js';
-import { detectPreset, resolve, describe, SHADOW_MAP, PARTICLE_CAP, DUST_COUNT, GLINT_COUNT } from './gfx.js';
+import { detectLevel, presetForLevel, resolve, describe, SHADOW_MAP, SPARK_MAX, DUST_MAX, GLINT_COUNT } from './gfx.js';
 import { Rng, fnv1a } from '../engine/rng.js';
 import { SPECIAL } from '../engine/rules.js';
 
@@ -127,11 +127,13 @@ function makeGemMaterials(palette) {
  *  Procedural textures (deterministic canvas art, built once)
  * ------------------------------------------------------------------ */
 
-function canvasTexture(size, draw, srgb = true) {
+// `authored` is the size the art was drawn for; `size` (the preset's texture budget) scales it.
+function canvasTexture(authored, draw, srgb = true, size = authored) {
   const c = document.createElement('canvas');
   c.width = c.height = size;
   const ctx = c.getContext('2d');
-  draw(ctx, size);
+  if (size !== authored) ctx.scale(size / authored, size / authored);
+  draw(ctx, authored);
   const tex = new THREE.CanvasTexture(c);
   if (srgb) tex.colorSpace = THREE.SRGBColorSpace;
   tex.anisotropy = 4;
@@ -139,7 +141,7 @@ function canvasTexture(size, draw, srgb = true) {
 }
 
 /** Walnut grain: concentric growth rings plus streaks, as a light multiplier. */
-function woodTexture(rng) {
+function woodTexture(rng, size = 512) {
   return canvasTexture(512, (ctx, n) => {
     ctx.fillStyle = '#e8e2dc';
     ctx.fillRect(0, 0, n, n);
@@ -157,11 +159,11 @@ function woodTexture(rng) {
       ctx.fillStyle = `rgba(${rng.next() < 0.5 ? '60,40,25' : '255,245,230'},${0.03 + rng.next() * 0.05})`;
       ctx.fillRect(rng.next() * n, rng.next() * n, 1 + rng.next() * 14, 1);
     }
-  });
+  }, true, size);
 }
 
 /** Cell tile: bevelled rim (light top-left, dark bottom-right) + faint grain. */
-function tileTexture(rng) {
+function tileTexture(rng, size = 128) {
   return canvasTexture(128, (ctx, n) => {
     ctx.fillStyle = '#f0ecef';
     ctx.fillRect(0, 0, n, n);
@@ -179,11 +181,11 @@ function tileTexture(rng) {
     g.addColorStop(1, 'rgba(0,0,0,0.1)');
     ctx.fillStyle = g;
     ctx.fillRect(b, b, n - 2 * b, n - 2 * b);
-  });
+  }, true, size);
 }
 
 /** Brushed-metal streaks for the brass frame (roughness map, linear). */
-function brushedTexture(rng) {
+function brushedTexture(rng, size = 256) {
   const tex = canvasTexture(256, (ctx, n) => {
     ctx.fillStyle = '#9a9a9a';
     ctx.fillRect(0, 0, n, n);
@@ -192,7 +194,7 @@ function brushedTexture(rng) {
       ctx.fillStyle = `rgba(${v},${v},${v},0.35)`;
       ctx.fillRect(rng.next() * n, rng.next() * n, 20 + rng.next() * 90, 1);
     }
-  }, false);
+  }, false, size);
   tex.wrapS = tex.wrapT = THREE.RepeatWrapping;
   return tex;
 }
@@ -449,6 +451,15 @@ class JewelView {
  *  JewelScene
  * ------------------------------------------------------------------ */
 
+// Run a post pass at a fraction of the frame: EffectComposer.addPass/setSize hand every pass the full
+// frame size, so the pass's own setSize applies the budget's scale (half-res bloom/GTAO below Ultra).
+function atScale(pass, k) {
+  if (!(k < 1)) return pass;
+  const setSize = pass.setSize.bind(pass);
+  pass.setSize = (w, h) => setSize(Math.max(1, Math.round(w * k)), Math.max(1, Math.round(h * k)));
+  return pass;
+}
+
 export class JewelScene {
   constructor(canvas, { settings } = {}) {
     this.canvas = canvas;
@@ -512,7 +523,7 @@ export class JewelScene {
     this._camInit = false;
     this._contextLost = false;
     this._dragCommitted = false;
-    this._dustVisible = DUST_COUNT.high;
+    this._dustVisible = 0;
     this.cameraPreset = 'default';
 
     this._initRenderer(canvas);
@@ -545,7 +556,16 @@ export class JewelScene {
     } catch {
       /* non-fatal */
     }
-    this.detected = detectPreset(this.gpu, { mobile });
+    // StarHermit hardware level (gpu-level.js): renderer string + device facts (cores, memory, screen).
+    let sys = { mobile, webgl2: this.renderer.capabilities.isWebGL2 !== false };
+    try {
+      const G = globalThis.StarHermitGpu;
+      if (G) { const d = G.detectSystem(); sys = { ...sys, mobile: mobile || d.mobile, touch: d.touch, screen: d.screen, cores: d.cores, memoryGb: d.memoryGb, astc: d.astc }; }
+    } catch {
+      /* defaults */
+    }
+    this.gpuLevel = detectLevel(this.gpu, sys);
+    this.detected = presetForLevel(this.gpuLevel);
 
     canvas.addEventListener('webglcontextlost', (e) => {
       e.preventDefault();
@@ -731,7 +751,7 @@ export class JewelScene {
     this.envGroup.add(this.props);
 
     // Drifting dust motes.
-    const dustCap = DUST_COUNT.high;
+    const dustCap = DUST_MAX;
     this.dustPos = new Float32Array(dustCap * 3);
     this.dustSeed = new Float32Array(dustCap * 2);
     for (let i = 0; i < dustCap; i++) {
@@ -758,6 +778,7 @@ export class JewelScene {
       tile: tileTexture(texRng),
       brushed: brushedTexture(texRng),
     };
+    this._texSize = 512;
 
     // Idle gem glints: a few four-point stars that twinkle on random jewels.
     this.glintPos = new Float32Array(GLINT_CAP * 3);
@@ -782,7 +803,7 @@ export class JewelScene {
     this._glintCount = 0;
 
     // Effects pool + beams.
-    this.particles = new ParticlePool(this.fxGroup, PARTICLE_CAP.high);
+    this.particles = new ParticlePool(this.fxGroup, SPARK_MAX);
     this._beamGeo = new THREE.BoxGeometry(1, 0.16, 1);
     this._beamMat = new THREE.MeshBasicMaterial({ color: '#fff2cf', transparent: true, opacity: 0, depthWrite: false });
     for (let i = 0; i < 8; i++) {
@@ -908,8 +929,11 @@ export class JewelScene {
 
   /** Apply saved graphics settings (settings.graphics; `{}` = Auto). Live, no reload. */
   setGraphics(saved) {
-    const g = resolve(saved || {}, this.detected);
+    const g = resolve(saved || {}, this.detected, this.gpuLevel);
     this.q = g;
+    const b = g.budget;
+    document.body.classList.toggle('gfx-hud-blur', !!b.hudBlur);
+    this._applyTextureBudget(b.texture);
     // Shadows: map size per tier; the frustum is fitted to the board in buildBoard.
     const size = SHADOW_MAP[g.shadows];
     this.renderer.shadowMap.enabled = size > 0;
@@ -923,8 +947,9 @@ export class JewelScene {
     this.scene.environment = g.reflections === 'on' ? this.envTexture : null;
     this._applyLightBalance();
     // Particles, dust and idle glints.
-    this.particles.setCapacityUsed(PARTICLE_CAP[g.particles]);
-    this._dustVisible = DUST_COUNT[g.particles] || 0;
+    this.particles.setCapacityUsed(b.sparks);
+    this._dustVisible = b.dust;
+    this.dust.geometry.setDrawRange(0, b.dust);
     this.dust.visible = this._dustVisible > 0;
     this._glintCount = GLINT_COUNT[g.particles] || 0;
     // Surface detail: props, wood grain, bevelled tiles, brushed brass, clearcoat.
@@ -934,7 +959,8 @@ export class JewelScene {
     this._setMap(this.tableRim.material, 'roughnessMap', detailed ? this.tex.brushed : null);
     if (this.cellMesh) this._setMap(this.cellMesh.material, 'map', detailed ? this.tex.tile : null);
     if (this.frameMesh) this._setMap(this.frameMesh.material, 'roughnessMap', detailed ? this.tex.brushed : null);
-    if (this.jewelMats) for (const m of this.jewelMats) m.clearcoat = detailed ? 1 : 0;
+    // Clear-coated jewels only where the budget allows the extra lobe (High/Ultra).
+    if (this.jewelMats) for (const m of this.jewelMats) m.clearcoat = detailed && b.clearcoat ? 1 : 0;
     // Specials glow a little brighter when bloom can pick them up.
     const glow = g.bloom === 'on' ? 1.7 : 1;
     JewelView.bloomMaterial().emissiveIntensity = 0.7 * glow;
@@ -963,6 +989,7 @@ export class JewelScene {
     const px = [Math.round(size.x * this.pixelRatio), Math.round(size.y * this.pixelRatio)];
     return {
       gpu: this.gpu || 'unknown GPU',
+      level: this.gpuLevel,
       detected: this.detected,
       resolved: this.q,
       summary: describe(this.q, px, words),
@@ -970,6 +997,27 @@ export class JewelScene {
       adaptiveScale: Math.round(this.adaptiveScale * 100) / 100,
       postFailed: !!this.postFailed,
     };
+  }
+
+  // Procedural textures at the budget's size (table wood = size, tiles ¼, brushed metal ½).
+  _applyTextureBudget(size) {
+    if (size === this._texSize) return;
+    this._texSize = size;
+    const texRng = new Rng(fnv1a('jc-tex'));
+    const old = this.tex;
+    this.tex = {
+      wood: woodTexture(texRng, size),
+      tile: tileTexture(texRng, Math.max(32, size / 4)),
+      brushed: brushedTexture(texRng, Math.max(64, size / 2)),
+    };
+    const swap = (m, slot) => {
+      if (!m || !m[slot]) return;
+      for (const k of ['wood', 'tile', 'brushed']) if (m[slot] === old[k]) { m[slot] = this.tex[k]; m.needsUpdate = true; }
+    };
+    this.scene.traverse((o) => {
+      for (const m of o.material ? (Array.isArray(o.material) ? o.material : [o.material]) : []) { swap(m, 'map'); swap(m, 'roughnessMap'); }
+    });
+    for (const k of ['wood', 'tile', 'brushed']) old[k].dispose();
   }
 
   _setMap(mat, slot, tex) {
@@ -1040,7 +1088,7 @@ export class JewelScene {
       composer.setSize(w, h);
       composer.addPass(new RenderPass(this.scene, this.camera));
       if (g.ao !== 'off') {
-        const ao = new GTAOPass(this.scene, this.camera, W, H);
+        const ao = atScale(new GTAOPass(this.scene, this.camera, W, H), g.budget.aoRes);
         ao.output = GTAOPass.OUTPUT.Default;
         ao.blendIntensity = 0.75;
         const hi = g.ao === 'high';
@@ -1050,7 +1098,7 @@ export class JewelScene {
       }
       if (g.bloom === 'on') {
         // High threshold: only lamps, glints, specials and specular highlights bloom.
-        composer.addPass(new UnrealBloomPass(new THREE.Vector2(W, H), 0.45, 0.4, 0.92));
+        composer.addPass(atScale(new UnrealBloomPass(new THREE.Vector2(W, H), 0.45, 0.4, 0.92), g.budget.bloomRes));
       }
       composer.addPass(new OutputPass());
       if (g.grade === 'on') composer.addPass(new ShaderPass(GradeShader));
@@ -2431,7 +2479,7 @@ export class JewelScene {
     if (this.dust.visible && this._animatedBg) {
       this._dustTime += dt;
       const t = this._dustTime;
-      const n = this._dustVisible || DUST_COUNT.high;
+      const n = this._dustVisible;
       for (let i = 0; i < n; i++) {
         const ph = this.dustSeed[i * 2];
         const sp = this.dustSeed[i * 2 + 1];

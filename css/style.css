@@ -171,6 +171,11 @@ input[type="range"] { accent-color: var(--accent); min-height: var(--tap); }
    vw/vh/vmin length in this stylesheet is divided by --ui-scale to compensate. */
 #ui-root, #fps-meter { zoom: var(--ui-scale, 1); }
 
+/* Frosted glass over the live 3D board only where the graphics budget allows it (High/Ultra,
+   body.gfx-hud-blur): a backdrop blur is re-composited every frame the board moves. */
+body.gfx-hud-blur #app-header, body.gfx-hud-blur .hud-status, body.gfx-hud-blur .rail { backdrop-filter: blur(6px); }
+body.gfx-hud-blur .screen.overlay { background: rgb(14 8 26 / 0.66); backdrop-filter: blur(3px); }
+
 #app-header {
   display: flex;
   align-items: center;
@@ -179,7 +184,6 @@ input[type="range"] { accent-color: var(--accent); min-height: var(--tap); }
   gap: var(--gap);
   padding: calc(0.4rem + var(--sat)) calc(0.8rem + var(--sar)) 0.4rem calc(0.8rem + var(--sal));
   background: linear-gradient(180deg, rgb(20 12 36 / 0.88), rgb(20 12 36 / 0.55));
-  backdrop-filter: blur(6px);
   border-block-end: 1px solid var(--panel-line);
   z-index: 30;
 }
@@ -217,8 +221,7 @@ body.in-game #app-header { display: none; }
 }
 .screen[hidden] { display: none; }
 .screen.overlay {
-  background: rgb(14 8 26 / 0.66);
-  backdrop-filter: blur(3px);
+  background: rgb(14 8 26 / 0.72);
   justify-content: center;
   z-index: 40;
 }
@@ -458,7 +461,6 @@ body.in-game #app-header { display: none; }
   border-radius: var(--radius-s);
   background: linear-gradient(180deg, rgb(20 12 36 / 0.85), rgb(20 12 36 / 0.6));
   border: 1px solid var(--panel-line);
-  backdrop-filter: blur(6px);
   font-size: 1.05rem;
   justify-self: center;
   max-width: 100%;
@@ -478,7 +480,6 @@ body.in-game #app-header { display: none; }
   border: 1px solid var(--panel-line);
   border-radius: var(--radius);
   padding: 0.9rem 1rem;
-  backdrop-filter: blur(6px);
   max-height: 100%;
   overflow-y: auto;
 }
@@ -841,8 +842,8 @@ body.in-game #app-header { display: none; }
     padding: 0.4rem calc(0.6rem + var(--sar)) calc(0.5rem + var(--sab)) calc(0.6rem + var(--sal));
     background: linear-gradient(0deg, rgb(20 12 36 / 0.92), rgb(20 12 36 / 0.55));
     border-block-start: 1px solid var(--panel-line);
-    backdrop-filter: blur(6px);
   }
+  body.gfx-hud-blur .thumb-tray { backdrop-filter: blur(6px); }
   .thumb-tray .btn { flex: 1; max-width: 9rem; min-width: 0; padding-inline: 0.3rem; overflow-wrap: anywhere; hyphens: auto; }
   .drawer-tab { top: auto; bottom: calc(6.4rem + var(--sab)); }
   .rail { bottom: calc(7.5rem + var(--sab)); }

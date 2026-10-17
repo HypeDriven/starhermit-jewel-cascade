@@ -158,6 +158,7 @@ async function runPass(browser, vp) {
       await page.waitForSelector('#fps-meter', { state: 'visible' });
       const summary = await page.textContent('#gfx-summary');
       if (!/1024² shadows/.test(summary) || /bloom/.test(summary)) throw new Error(`summary does not reflect High + bloom off: ${summary}`);
+      if (!/ · Level 0 · /.test(summary)) throw new Error(`summary lacks the hardware level: ${summary}`);
       await page.screenshot({ path: SHOT('graphics', vp.name) });
       await page.reload({ waitUntil: 'load' });
       await page.waitForSelector(screenVisible('title'), { timeout: 20000 });
