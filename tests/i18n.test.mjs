@@ -1,26 +1,32 @@
-// Localization coverage: every English key the code, content and markup use is
-// translated in every locale (en-GB → en-US, es-ES → es-419, fr-CA → fr-FR
-// inherit), placeholders survive, and the language follows sh-language.js and
-// switches live. Run: node --test tests/i18n.test.mjs
+// Localization coverage: every English key the native client and the content
+// use is translated in every locale (en-GB → en-US, es-ES → es-419, fr-CA →
+// fr-FR inherit), placeholders survive, no table row is unused, and the account
+// strings are complete in all nine locales. Run: node --test tests/i18n.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
-import { codeKeys, htmlKeys, audit, loadTables, bootI18n } from './i18n-common.mjs';
+import { readFileSync, readdirSync } from 'node:fs';
+import { codeKeys, audit, LOCALES } from './i18n-common.mjs';
+import '../js/strings.js';
+import { SH_ALL } from '../js/account-strings.js';
 import * as content from '../js/engine/content.js';
 import { ACHIEVEMENTS } from '../js/engine/achievements.js';
 import { THEMES } from '../js/engine/themes.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
-const TABLES = loadTables(ROOT, 'js/strings.js', 'JC_STRINGS');
+const TABLES = globalThis.JC_STRINGS;
 // Names that stay as they are in every language.
 const NAMES = new Set(['Jewel Cascade', 'StarHermit']);
 
 export function usedKeys() {
   const keys = new Set();
-  for (const f of ['js/ui/ui.js', 'js/main.js', 'js/platform.js']) codeKeys(read(f)).forEach((k) => keys.add(k));
-  htmlKeys(read('index.html')).forEach((k) => keys.add(k));
-  // Content shown by name/description (ui.js contentName/contentDesc compose the rest).
+  for (const f of readdirSync(new URL('native/', ROOT)).filter((n) => n.endsWith('.ts'))) {
+    const src = read(`native/${f}`);
+    codeKeys(src, [], ['T', 'N']).forEach((k) => keys.add(k));
+    // Sound captions (audio.ts "[…]" strings) are keys too.
+    if (f === 'audio.ts') for (const m of src.split('\n').filter((l) => !/^\s*\/\//.test(l)).join('\n').matchAll(/"(\[[^"\]]+\])"/g)) keys.add(m[1]);
+  }
+  // Content shown by name/description (main.ts contentName/contentDesc compose the rest).
   for (const l of content.LESSONS) {
     keys.add(l.name); keys.add(l.desc);
     for (const s of l.steps || []) keys.add(s.text);
@@ -32,27 +38,20 @@ export function usedKeys() {
   keys.add(content.scoreChaseContent('x').name);
   for (const a of ACHIEVEMENTS) { keys.add(a.name); keys.add(a.desc); }
   for (const t of THEMES) keys.add(t.name);
-  const cos = /const COSMETIC_NAMES = \{([\s\S]*?)\};/.exec(read('js/ui/ui.js'))[1];
-  for (const m of cos.matchAll(/:\s*'([^']+)'/g)) keys.add(m[1]);
-  // Sound captions (audio.js) are keys; the rising chime is composed in ui.js.
-  for (const m of read('js/audio.js').matchAll(/'(\[[a-z ]+\])'/g)) keys.add(m[1]);
-  return [...keys].filter((k) => k && /[A-Za-z]/.test(k) && !NAMES.has(k) && !/^\[chime rising x$/.test(k)).sort();
+  return [...keys].filter((k) => k && /[A-Za-z]/.test(k) && !NAMES.has(k)).sort();
 }
 
-test('every used key is translated in every locale; placeholders intact', () => {
+test('every used key is translated in every locale; placeholders intact; no unused rows', () => {
   assert.deepEqual(audit(TABLES, usedKeys()), []);
 });
 
-test('the locale follows sh-language and switches live', () => {
-  const { I18N, events, doc } = bootI18n(ROOT, { strings: 'js/strings.js', i18n: 'js/i18n.js', global: 'JCI18N' });
-  assert.equal(I18N.lang, 'de-DE');
-  assert.equal(doc.documentElement.lang, 'de-DE');
-  assert.equal(I18N.T('Settings'), 'Einstellungen');
-  const msg = I18N.L('Stage {n} of {total} · {stars}★', { n: 2, total: 40, stars: 5 });
-  I18N.language.setChoice('fr-CA');
-  assert.equal(I18N.lang, 'fr-CA');
-  assert.equal(events.at(-1), 'fr-CA');
-  assert.match(msg(), /^Étape 2 sur 40/);
-  I18N.language.setChoice('en-GB');
-  assert.equal(I18N.T('Color palette'), 'Colour palette');
+test('account strings exist in all nine locales with the same keys', () => {
+  const keys = Object.keys(SH_ALL['en-US']).sort();
+  for (const l of LOCALES) assert.deepEqual(Object.keys(SH_ALL[l] ?? {}).sort(), keys, l);
+  for (const l of LOCALES) assert.ok(SH_ALL[l].lbRank.includes('{rank}') && SH_ALL[l].copyFailed.includes('{link}'), l);
+});
+
+test('en-GB, es-ES and fr-CA carry their regional differences', () => {
+  assert.equal(TABLES['en-GB']['Color palette'], 'Colour palette');
+  assert.ok(TABLES['fr-CA']['Score chase']);
 });

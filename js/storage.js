@@ -9,7 +9,6 @@
  */
 
 import { fnv1a, stableStringify } from './engine/rng.js';
-import { migrate as migrateGraphics } from './render/gfx.js';
 
 const PREFIX = 'jewelcascade.';
 export const SETTINGS_VERSION = 1;
@@ -25,8 +24,6 @@ export function defaultSettings() {
   return {
     version: SETTINGS_VERSION,
     audio: { master: 0.8, music: 0.65, effects: 0.9, ambience: 0.55, voice: 0.8, muted: false },
-    // preset: auto | low | balanced | high | ultra; per-category overrides as in render/gfx.js
-    graphics: { preset: 'auto', render_scale: 1, adaptive: true, show_fps: false },
     motion: { reduced: false }, // follows prefers-reduced-motion until changed
     display: {
       highContrast: false,
@@ -95,20 +92,32 @@ function safeStorage() {
     // Private mode / file:// restrictions: fall back to an in-memory store so
     // play continues and account state survives the session. Exposes key() and
     // length like real Storage so key iteration (e.g. wipeAll) works.
-    const mem = new Map();
-    return {
-      getItem: (k) => (mem.has(k) ? mem.get(k) : null),
-      setItem: (k, v) => mem.set(k, String(v)),
-      removeItem: (k) => mem.delete(k),
-      key: (i) => [...mem.keys()][i] ?? null,
-      get length() {
-        return mem.size;
-      },
-    };
+    return memoryStorage();
   }
 }
 
-const store = typeof window !== 'undefined' ? safeStorage() : new (function () {})();
+function memoryStorage() {
+  const mem = new Map();
+  return {
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+    removeItem: (k) => mem.delete(k),
+    key: (i) => [...mem.keys()][i] ?? null,
+    get length() {
+      return mem.size;
+    },
+  };
+}
+
+// The browser's localStorage when there is one; the StarHermit engine client
+// installs its own backend (setBackend: the progress document is the engine's
+// cloud save, the settings the game's synced settings, the rest device storage).
+let store = typeof window !== 'undefined' && window.localStorage ? safeStorage() : memoryStorage();
+
+/** Replace the key/value backend (getItem/setItem/removeItem/key/length, as Storage). */
+export function setBackend(backend) {
+  store = backend;
+}
 
 function wrap(data, version) {
   return { v: version, sum: fnv1a(stableStringify(data)), data };
@@ -158,7 +167,6 @@ export function loadSettings() {
     ...d,
     ...s,
     audio: { ...d.audio, ...(s.audio || {}) },
-    graphics: { ...d.graphics, ...migrateGraphics(s.graphics || {}) },
     motion: { ...d.motion, ...(s.motion || {}) },
     display: { ...d.display, ...(s.display || {}) },
     input: { ...d.input, ...(s.input || {}) },

@@ -1,20 +1,53 @@
 name=Jewel Cascade
 description=Swap adjacent jewels, create powerful matches, and fulfill gem orders before your moves run out.
-launch=index.html
 owner=2712e04e-461b-4d23-81ae-e40b429128a8
 server=score-script.js
 cover=cover.jpg
+
+# StarHermit engine script game: one package, played natively by the
+# StarHermit client and in browsers by the engine's web runtime. Browsers open
+# launch=index.html, the loader `npm run package` writes (it pins the engine
+# on wiki.starhermit.com by hash; never edit it). Re-run `npm run package`
+# after every change and commit index.html + starhermit-files.json.
+launch=index.html
+engine.api=1
+engine.entry=native/main.ts
+engine.version=1.17.1
+engine.minor=19
+engine.capabilities=platform,storage,clipboard
+
+# Keyboard controls (players rebind keys and pads in the runtime's Options).
+# The action names are the browser build's, so bindings saved with the
+# account carry over. The board is also played with the pointer or touch:
+# tap a jewel, then a neighbour (or drag it toward the neighbour); the
+# action rail / thumb tray has Hint, Undo, Skip, Camera, Text board and Pause.
 control.up=ArrowUp | Cursor up
 control.down=ArrowDown | Cursor down
 control.left=ArrowLeft | Cursor left
 control.right=ArrowRight | Cursor right
 control.confirm=Enter | Select / swap
 control.confirm2=Space | Select / swap (alternate)
-control.cancel=Escape | Cancel
+control.cancel=Escape | Cancel / back
 control.pause=KeyP | Pause
 control.hint=KeyH | Hint
 control.undo=KeyU | Undo (practice)
 control.skip=KeyS | Skip settle animation
 control.camera=KeyC | Cycle camera
-control.mute=KeyM | Mute
+control.mute=KeyM | Mute game sounds
 control.help=Slash | Help
+engine.group.up=Board
+engine.group.pause=Round
+
+# Gamepad defaults (the browser build's mapping: D-pad or left stick moves
+# the cursor, A selects, B cancels, X hints, Y undoes, RB cycles the camera,
+# Start pauses).
+engine.gamepad.up=DpadUp+LeftStickUp
+engine.gamepad.down=DpadDown+LeftStickDown
+engine.gamepad.left=DpadLeft+LeftStickLeft
+engine.gamepad.right=DpadRight+LeftStickRight
+engine.gamepad.confirm=South
+engine.gamepad.cancel=East
+engine.gamepad.hint=West
+engine.gamepad.undo=North
+engine.gamepad.camera=RightShoulder
+engine.gamepad.pause=Start

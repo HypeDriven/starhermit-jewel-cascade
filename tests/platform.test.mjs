@@ -1,176 +1,112 @@
-// Platform over the shared StarHermit SDK: token, profile, cloud save,
-// settings KV, controls, invite link and the standalone guarantee.
+// The platform data paths that cannot be live-tested signed out: the browser
+// build's cloud save read back (js/migrate.js parseForeign) and merged into a
+// device's progress (js/storage.js mergeProgress, as on a save conflict), its
+// account settings carried over (settingsFromLegacy), and the documents on an
+// injected backend (storage.setBackend, as native/platform.ts installs one).
+// Run: node --test tests/platform.test.mjs
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { readFileSync } from 'node:fs';
+import { parseForeign, settingsFromLegacy, LEGACY_KEYS } from '../js/migrate.js';
+import * as storage from '../js/storage.js';
 
-// The SDK is a UMD classic script; under "type": "module" load it as CommonJS by hand.
-const sdkModule = { exports: {} };
-new Function('module', 'exports', readFileSync(new URL('../js/starhermit-sdk.js', import.meta.url), 'utf8'))(sdkModule, sdkModule.exports);
-const SDK = sdkModule.exports;
-const { Platform } = await import('../js/platform.js');
-const storage = await import('../js/storage.js');
-
-const b64u = (o) => Buffer.from(JSON.stringify(o)).toString('base64url');
-const token = () => 'h.' + b64u({ sub: 'user-123456789', game_scope: 'gid-1', exp: Math.floor(Date.now() / 1000) + 3600 }) + '.s';
-
-function backend() {
-  const calls = [], saves = {}, settings = {}, controls = {};
-  const fetch = async (url, init = {}) => {
-    const method = init.method || 'GET';
-    const body = init.body ? JSON.parse(init.body) : undefined;
-    const auth = init.headers && init.headers.Authorization;
-    calls.push({ method, url, body, auth });
-    const r = (st, b) => new Response(b, { status: st });
-    if (url.includes('/cloud-saves/')) {
-      const key = decodeURIComponent(url.split('/cloud-saves/')[1]);
-      if (key.endsWith('/info')) return r(200, JSON.stringify({ exists: !!saves[key.slice(0, -5)] }));
-      if (method === 'PUT') { saves[key] = Buffer.from(body.dataBase64, 'base64'); return r(200, JSON.stringify({ etag: '"v' + calls.length + '"' })); }
-      return saves[key] ? r(200, saves[key]) : r(404, '');
-    }
-    if (url.endsWith('/time')) return r(200, JSON.stringify({ now: Date.now() }));
-    if (url.endsWith('/profile')) return r(200, JSON.stringify({ username: 'pk', nickname: 'Al' }));
-    if (/\/settings$/.test(url)) {
-      if (method === 'PATCH') Object.assign(settings, body.settings);
-      return r(200, JSON.stringify({ settings }));
-    }
-    if (url.endsWith('/controls')) {
-      if (method === 'PUT') { Object.assign(controls, body.bindings); return r(200, '{}'); }
-      if (method === 'DELETE') { for (const k of Object.keys(controls)) delete controls[k]; return r(204, null); }
-      return r(200, JSON.stringify({ actions: Object.entries(controls).map(([action, codes]) => ({ action, codes })) }));
-    }
-    return r(404, '');
+function memBackend() {
+  const mem = new Map();
+  return {
+    mem,
+    getItem: (k) => (mem.has(k) ? mem.get(k) : null),
+    setItem: (k, v) => mem.set(k, String(v)),
+    removeItem: (k) => mem.delete(k),
+    key: (i) => [...mem.keys()][i] ?? null,
+    get length() { return mem.size; },
   };
-  return { calls, saves, fetch };
 }
 
-function install(hash, fetchImpl, hostname = 'localhost') {
-  let replaced = null;
-  const loc = { hash, search: '', pathname: '/', hostname, origin: 'https://' + hostname, href: 'https://' + hostname + '/' + hash };
-  const win = { location: loc, history: { replaceState: (a, b, u) => { replaced = u; } } };
-  const sdk = SDK.create({ window: win, fetch: fetchImpl });
-  globalThis.window = { StarHermit: sdk, location: loc, localStorage: { getItem: () => null, setItem() {} } };
-  globalThis.fetch = fetchImpl;
-  return { sdk, replaced: () => replaced };
-}
-
-test('launch token: profile, cloud save game:<slug>, settings, controls, invite', async () => {
-  const be = backend();
-  const { sdk, replaced } = install('#game_token=' + token(), be.fetch);
-  const p = new Platform();
-  await p.init();
-  assert.equal(p.hosted, true);
-  assert.equal(p.gameSlug, 'gid-1');
-  assert.equal(replaced(), '/');
-  assert.equal(p.profile.displayName, 'Al');
-
-  p.queueCloudSave({ journeyUnlocked: 5, _savedAt: '2026-10-03' });
-  assert.equal(p.syncState, 'saving');
-  await p.flushCloudSave();
-  const put = be.calls.find((c) => c.method === 'PUT' && c.url.includes('cloud-saves'));
-  assert.equal(put.url, '/api/v1/me/cloud-saves/' + encodeURIComponent('game:gid-1'));
-  assert.equal(p.syncState, 'synced');
-  assert.deepEqual((await p.cloudLoad()).doc, { journeyUnlocked: 5, _savedAt: '2026-10-03' });
-
-  p.patchSettings({ audio: { muted: true } });
-  await new Promise((r) => setTimeout(r, 10));
-  const patch = be.calls.find((c) => c.method === 'PATCH');
-  assert.equal(patch.url, '/api/v1/games/gid-1/settings');
-  assert.deepEqual(patch.body, { settings: { audio: { muted: true } } });
-  assert.deepEqual(await p.getSettings(), { audio: { muted: true } });
-
-  await p.setControl('hint', ['KeyJ']);
-  assert.deepEqual(await p.loadBindings({ hint: ['KeyH'], undo: ['KeyU'] }), { hint: ['KeyJ'], undo: ['KeyU'] });
-  await p.resetControls();
-  assert.deepEqual(await p.loadBindings({ hint: ['KeyH'] }), { hint: ['KeyH'] });
-
-  assert.ok(p.inviteLink().endsWith('/game-invite/user-123456789/gid-1'));
-  assert.ok(be.calls.every((c) => c.auth === 'Bearer ' + sdk.token));
-
-  const sent = [];
-  sdk.submitScores = async (sc) => { sent.push(sc); return Object.keys(sc); };
-  sdk.leaderboard = async (key) => ({ items: key === 'high-score' ? [{ userId: 'user-123456789', rank: 7 }] : [] });
-  assert.deepEqual(await p.submitScore(4321), { posted: true, rank: 7 });
-  assert.deepEqual(sent, [{ 'high-score': 4321 }]);
-  sdk.submitScores = async () => [];
-  assert.deepEqual(await p.submitScore(1), { posted: false, rank: null });
-  sdk.signOut();
+test('the old cloud slot: a progress document reads back; anything else is ignored', () => {
+  const p = storage.defaultProgress();
+  p.journeyStars = { j1: 3 };
+  p.masteryXp = 120;
+  assert.deepEqual(parseForeign(JSON.stringify(p)).journeyStars, { j1: 3 });
+  assert.equal(parseForeign('not json'), null);
+  assert.equal(parseForeign('[1,2]'), null);
+  assert.equal(parseForeign(JSON.stringify({ schemaVersion: 1, other: true })), null);
+  assert.equal(parseForeign(null), null);
 });
 
-test('standalone: no network calls at all', async () => {
-  const urls = [];
-  install('', async (u) => { urls.push(String(u)); throw new Error('offline'); });
-  const p = new Platform();
-  await p.init();
-  assert.equal(p.hosted, false);
-  assert.equal(p.canSignIn(), false);
-  p.queueCloudSave({ a: 1 });
-  await p.flushCloudSave();
-  p.patchSettings({ a: 1 });
-  assert.deepEqual(await p.getSettings(), {});
-  assert.deepEqual(await p.loadBindings({ hint: ['KeyH'] }), { hint: ['KeyH'] });
-  assert.equal(p.inviteLink(), null);
-  assert.equal(await p.syncTime(), false);
-  assert.deepEqual((await p.fetchBoards({ board: 'global' })).entries, []);
-  assert.equal(await p.cloudLoad(), null);
-  assert.deepEqual(await p.submitScore(5000), { posted: false, rank: null });
-  assert.deepEqual(urls, []);
+test('merging the old cloud progress into a device keeps the best of both', () => {
+  const local = storage.defaultProgress();
+  local.journeyStars = { j1: 2, j2: 1 };
+  local.journeyUnlocked = 3;
+  local.masteryXp = 50;
+  local.achievements = { first_completion: { at: '2026-09-02T00:00:00Z' } };
+  local._savedAt = '2026-09-02T00:00:00Z';
+  const remote = storage.defaultProgress();
+  remote.journeyStars = { j1: 3, j5: 1 };
+  remote.journeyUnlocked = 6;
+  remote.masteryXp = 40;
+  remote.achievements = { first_completion: { at: '2026-09-01T00:00:00Z' }, streak_5: { at: '2026-09-03T00:00:00Z' } };
+  remote.cosmeticsUnlocked.themes.push('moonlit-forge');
+  remote.daily = { lastPlayed: '2026-09-03', streak: 4, best: { '2026-09-03': 3100 } };
+  remote._savedAt = '2026-09-03T00:00:00Z';
+  const m = storage.mergeProgress(local, parseForeign(JSON.stringify(remote)));
+  assert.deepEqual(m.journeyStars, { j1: 3, j2: 1, j5: 1 });
+  assert.equal(m.journeyUnlocked, 6);
+  assert.equal(m.masteryXp, 50);
+  assert.equal(m.achievements.first_completion.at, '2026-09-01T00:00:00Z');
+  assert.ok(m.achievements.streak_5);
+  assert.ok(m.cosmeticsUnlocked.themes.includes('moonlit-forge'));
+  assert.equal(m.daily.streak, 4);
+  assert.equal(m.daily.best['2026-09-03'], 3100);
+  assert.equal(m._savedAt, '2026-09-03T00:00:00Z');
 });
 
-test('hosted domain without a token offers sign-in', async () => {
-  install('', async () => { throw new Error('offline'); }, '0b9d6f2e-3c4a-4e5b-9a7c-1d2e3f405162.starhermit.com');
-  const p = new Platform();
-  await p.init();
-  assert.equal(p.hosted, false);
-  assert.equal(p.canSignIn(), true);
-});
-
-test('leaderboard line strings in every locale', async () => {
-  const { SH_STRINGS } = await import('../js/ui/gfx-i18n.js');
-  assert.equal(Object.keys(SH_STRINGS).length, 9);
-  for (const [l, t] of Object.entries(SH_STRINGS)) {
-    for (const k of ['lbPosting', 'lbRank', 'lbPosted', 'lbNotPosted']) assert.ok(t[k], l + ' ' + k);
-    assert.ok(t.lbRank.includes('{rank}'));
-  }
-});
-
-test("save conflict: the other device's progress is reloaded, merged and saved again", async () => {
-  const remoteDoc = { ...storage.defaultProgress(), journeyStars: { j1: 3, j2: 1 }, journeyUnlocked: 3, masteryXp: 900, achievements: { first_setting: { at: '2026-10-01T00:00:00Z' } }, tutorialsDone: { t1: true }, _savedAt: '2026-10-05T00:00:00Z' };
-  const zipSdk = SDK.create({ window: { location: { hash: '', search: '', pathname: '/', origin: 'https://x', hostname: 'x', href: 'https://x/' }, history: { replaceState() {} } }, fetch: async () => new Response('', { status: 404 }) });
-  const remoteBytes = await zipSdk._zip('save.json', new TextEncoder().encode(JSON.stringify(remoteDoc)));
-  let conflictOnce = true;
-  const puts = [];
-  const fetch = async (url, init = {}) => {
-    const method = init.method || 'GET';
-    if (url.endsWith('/info')) return new Response(JSON.stringify({ exists: true, etag: conflictOnce ? '"v1"' : '"v2"' }), { status: 200 });
-    if (url.includes('/cloud-saves/') && method === 'GET') return new Response(remoteBytes, { status: 200 });
-    if (url.includes('/cloud-saves/') && method === 'PUT') {
-      if (conflictOnce) { conflictOnce = false; return new Response(JSON.stringify({ error: 'conflict', etag: '"v2"' }), { status: 412 }); }
-      puts.push(JSON.parse(init.body)); return new Response(JSON.stringify({ etag: '"v3"' }), { status: 200 });
-    }
-    if (url.endsWith('/profile')) return new Response(JSON.stringify({ nickname: 'Al' }), { status: 200 });
-    return new Response('', { status: 404 });
-  };
-  const { sdk } = install('#game_token=' + token(), fetch);
-  const p = new Platform();
-  await p.init();
-  const local = { ...storage.defaultProgress(), journeyStars: { j1: 1, j3: 2 }, journeyUnlocked: 4, masteryXp: 300, achievements: { steady_hands: { at: '2026-10-04T00:00:00Z' } }, _savedAt: '2026-10-04T00:00:00Z' };
-  const merged = new Promise((resolve) => {
-    p.onConflict = (doc) => {
-      storage.mergeProgress(local, doc);
-      p.queueCloudSave(local);
-      p.flushCloudSave().then(() => resolve(local));
-    };
+test('the old account settings: the game options carry over, the runtime-owned ones do not', () => {
+  const d = storage.defaultSettings();
+  const s = settingsFromLegacy(d, {
+    audio: { master: 0.2, muted: true },
+    graphics: { preset: 'ultra' },
+    display: { palette: 'deuter', leftHanded: true, highContrast: true, textSize: 'xl' },
+    input: { holdToDrag: false, haptics: false },
+    access: { timingAssist: true, captions: true },
+    camera: { preset: 'high' },
+    player: { displayName: 'Opal Fan' },
+    cosmetics: { theme: 'moonlit-forge', trail: 'spark', frame: 'brass', title: 'apprentice' },
+    'ui.language': 'de-DE',
   });
-  await p.cloudLoad();
-  p.queueCloudSave(local);
-  p.flushCloudSave();
-  const progress = await merged;
-  assert.deepEqual(progress.journeyStars, { j1: 3, j2: 1, j3: 2 });
-  assert.equal(progress.journeyUnlocked, 4);
-  assert.equal(progress.masteryXp, 900);
-  assert.deepEqual(Object.keys(progress.achievements).sort(), ['first_setting', 'steady_hands']);
-  assert.ok(progress.tutorialsDone.t1);
-  assert.equal(puts.length, 1, 'merged save written once');
-  sdk.signOut();
+  assert.equal(s.audio.muted, true);
+  assert.equal(s.audio.master, d.audio.master);
+  assert.equal(s.display.palette, 'deuter');
+  assert.equal(s.display.leftHanded, true);
+  assert.equal(s.display.highContrast, false);
+  assert.equal(s.input.holdToDrag, false);
+  assert.equal(s.access.timingAssist, true);
+  assert.equal(s.access.captions, true);
+  assert.equal(s.camera.preset, 'high');
+  assert.equal(s.player.displayName, 'Opal Fan');
+  assert.equal(s.cosmetics.theme, 'moonlit-forge');
+  assert.equal('graphics' in s, false);
+  // Wrong types are ignored.
+  assert.equal(settingsFromLegacy(d, { display: { palette: 7 } }).display.palette, 'default');
+  for (const k of ['audio', 'display', 'cosmetics', 'ui.language', 'audio.options']) assert.ok(LEGACY_KEYS.includes(k));
+});
+
+test('the documents live on an injected backend, checksummed as before', () => {
+  const b = memBackend();
+  storage.setBackend(b);
+  const p = storage.loadProgress();
+  p.masteryXp = 77;
+  storage.saveProgress(p);
+  const raw = JSON.parse(b.mem.get('jewelcascade.progress'));
+  assert.equal(raw.data.masteryXp, 77);
+  assert.equal(typeof raw.sum, 'number');
+  assert.equal(storage.loadProgress().masteryXp, 77);
+  // A tampered document falls back to the defaults.
+  raw.data.masteryXp = 9999;
+  b.mem.set('jewelcascade.progress', JSON.stringify(raw));
+  assert.equal(storage.loadProgress().masteryXp, 0);
+  const s = storage.loadSettings();
+  s.display.palette = 'tritan';
+  storage.saveSettings(s);
+  assert.equal(storage.loadSettings().display.palette, 'tritan');
+  storage.wipeAll();
+  assert.equal(b.length, 0);
 });

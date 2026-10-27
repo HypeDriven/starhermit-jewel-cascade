@@ -3,11 +3,18 @@
   "version": "1.0.0",
   "type": "module",
   "private": true,
+  "description": "Jewel Cascade — a match-3 objective puzzle in a twilight jewel workshop, on the StarHermit engine.",
   "scripts": {
-    "start": "node server.js",
-    "test": "node tests/run.mjs && node --test tests/gfx.test.mjs tests/platform.test.mjs tests/i18n.test.mjs",
-    "test:e2e": "node tests/e2e.mjs"
+    "test": "npm run test:unit && npm run test:native",
+    "test:unit": "node tests/run.mjs && node --test tests/platform.test.mjs tests/i18n.test.mjs",
+    "test:native": "node tests/native.mjs",
+    "test:browser": "node tools/browser-play.mjs .",
+    "package": "node tools/package-web.mjs",
+    "css": "node tools/css.mjs",
+    "plays": "node tools/gen-plays.mjs",
+    "start": "node server.js"
   },
+  "license": "SEE LICENSE IN LICENSE.md",
   "devDependencies": {
     "playwright-core": "^1.62.1"
   }
