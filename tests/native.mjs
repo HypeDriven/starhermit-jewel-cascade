@@ -4,7 +4,7 @@
 // as a signed-out offscreen run (--render-check) that drives the real UI.
 // Also checks that the committed web index (starhermit-files.json) matches
 // the files, i.e. that `npm run package` ran after the last change. STARHERMIT
-// names the runtime (default: the published 1.17.1 Linux runtime under
+// names the runtime (default: the published 1.18.0 Linux runtime under
 // ~/sh/runtime); TSC the TypeScript compiler (default ~/sh/runtime/ts).
 import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
@@ -14,7 +14,7 @@ import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const root = join(dirname(fileURLToPath(import.meta.url)), '..');
-const fallback = join(homedir(), 'sh/runtime/1.17.1/starhermit-1.17.1-linux-x86_64/starhermit');
+const fallback = join(homedir(), 'sh/runtime/1.18.0/starhermit-1.18.0-linux-x86_64/starhermit');
 const exe = process.env.STARHERMIT || (existsSync(fallback) ? fallback : null);
 const tsc = process.env.TSC || join(homedir(), 'sh/runtime/ts/node_modules/.bin/tsc');
 let failed = 0;
