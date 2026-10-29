@@ -16,7 +16,7 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | Players | 1, with asynchronous ranked comparison |
 | Session | 90 s – 4 min per round; a Journey act is ~20 min |
 | Platforms | The StarHermit client (native) and browsers (the engine's web runtime); desktop and phones, portrait and landscape |
-| Engine | StarHermit engine script game, pinned to engine **1.23.0** (host API 1.21, `engine.minor=19`) |
+| Engine | StarHermit engine script game, pinned to engine **1.24.0** (host API 1.21, `engine.minor=19`) |
 | Rendering | `starhermit:scene` tabletop scene, `starhermit:ui` menus and HUD, with a complete text board as an equal play path |
 | Entry point | `native/main.ts` (`engine.entry`); browsers open the loader `index.html` (`launch`) |
 
