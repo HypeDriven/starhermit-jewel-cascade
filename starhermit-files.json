@@ -5,7 +5,7 @@
     "assets/ui-style.json": {"sha256": "d364a7b6b544481c116e5eeb5a0cb64a361173b62be969d1bca6dd3bed0a8e4e", "size": 27695},
     "cover.jpg": {"sha256": "bc1191efacd27857602193959dd7212655038f2fae02f283573757fa52c70fdd", "size": 244130},
     "icon.png": {"sha256": "00e79e846b334281b47d705d351af3140848cf0e8be488070e552a82da4b8256", "size": 6139},
-    "index.html": {"sha256": "5dca51aaa50890cb1640e19e02ac4141101cce6037164b45567135647feca433", "size": 1762},
+    "index.html": {"sha256": "027d5a318fe5d99c9dd0398d93886d542423f55c0b25dc290778cd4c650ea31a", "size": 1762},
     "js/account-strings.js": {"sha256": "58a5b3e8c26724ed8ff507523e46f71473246695cb381eeaa9b0b1987668d11e", "size": 4976},
     "js/engine/achievements.js": {"sha256": "d692cbf3804f7717ae60d5640637836a46ef63ebca9f45875943975b0fd25c65", "size": 4287},
     "js/engine/content.js": {"sha256": "7fcdebd19969e10cef5440731175175b2e508820a0016a1d2e95ed99ab7bee11", "size": 40634},
@@ -63,7 +63,7 @@
     "sfx/ui-toast.opus": {"sha256": "7dec154722d983064944a298cae1c3a630393eecdafd40ee90556c07c929c069", "size": 26477},
     "sfx/ui-toggle.opus": {"sha256": "7722434513b57cead9850b4a7196a2670eb2e66f337f70264807622c8855da0b", "size": 11625},
     "sfx/undo.opus": {"sha256": "467adcf891457c4fe4bd5c922682397060476dff688e9919f779485af4f50265", "size": 25702},
-    "starhermit.txt": {"sha256": "f9261823658731447d54f10eb304578734df2372e8da56f804ee0b6ed298e484", "size": 2152}
+    "starhermit.txt": {"sha256": "3d1b7a08382d38247a5a9bef1e9d2252e396c4ef09244173a8e1a25baffa8830", "size": 2152}
   },
   "excluded": ["LICENSE.md", "README.md", "coverart.png", "data/", "knownissues.md", "node_modules/", "package-lock.json", "package.json", "server.js", "sfx/manifest.json", "sfx/manifest.md", "sfx/manifest.txt", "spec.md", "tests/", "tools/", "tsconfig.json"],
   "format": 1

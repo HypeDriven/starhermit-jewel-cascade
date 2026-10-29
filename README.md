@@ -4,7 +4,7 @@ A deterministic match-3 puzzle game set in a jewel workshop suspended in warm
 twilight. Swap adjacent jewels to form lines of three or more, create rays,
 blooms, and prisms, and complete limited-move goals across six modes.
 
-A StarHermit engine script game (engine 1.22.0): one package played natively
+A StarHermit engine script game (engine 1.23.0): one package played natively
 by the StarHermit client and in browsers by the engine's web runtime.
 
 ## Run
