@@ -16,7 +16,7 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | Players | 1, with asynchronous ranked comparison |
 | Session | 90 s – 4 min per round; a Journey act is ~20 min |
 | Platforms | The StarHermit client (native) and browsers (the engine's web runtime); desktop and phones, portrait and landscape |
-| Engine | StarHermit engine script game, pinned to engine **1.24.0** (host API 1.21, `engine.minor=19`) |
+| Engine | StarHermit engine script game, pinned to engine **1.26.1** (host API 1.28, `engine.minor=28`) |
 | Rendering | `starhermit:scene` tabletop scene, `starhermit:ui` menus and HUD, with a complete text board as an equal play path |
 | Entry point | `native/main.ts` (`engine.entry`); browsers open the loader `index.html` (`launch`) |
 
@@ -372,7 +372,7 @@ for rays, a warm wireframe icosahedron for blooms, a cool slowly spinning one fo
 
 **Scene.** A walnut table with a brass rim, five seeded hanging lamps, 260 stars, drifting dust,
 14 prop gems; ACES filmic tone mapping (exposure 1.05); a warm key directional light (shadow fitted
-round the board), a cool fill, hemisphere and ambient terms (light intensities are three.js's ÷ π,
+round the board), a cool fill, hemisphere and ambient terms (light intensities are three.js r161's (minor 23+),
 the engine's convention; the ambient is trimmed with image-based lighting on); reflections from
 `PMREMGenerator.fromScene(new RoomEnvironment(renderer))`; procedural canvas textures (walnut grain,
 bevelled tiles, brushed brass) at the budget's size.

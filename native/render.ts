@@ -31,6 +31,7 @@ import {
   PerspectiveCamera, PlaneGeometry, PMREMGenerator, Plane, Points, PointsMaterial, Raycaster, RepeatWrapping, RingGeometry,
   RoomEnvironment, SphereGeometry, SRGBColorSpace, TetrahedronGeometry, TorusGeometry, Vector3, pointerToNdc, renderer, scene,
   type Material, type Texture,
+  type OrthographicCamera,
 } from "starhermit:scene";
 import { OffscreenCanvas, type OffscreenCanvasRenderingContext2D } from "starhermit:canvas";
 import { DUST_MAX, GLINT_COUNT, SPARK_MAX, type Look } from "./quality.ts";
@@ -70,18 +71,18 @@ scene.background = new Color("#1a1226");
 const fog = new FogExp2("#4a2c5a", 0.028);
 scene.fog = fog;
 
-const keyLight = new DirectionalLight("#ffb36b", 2.4 / PI);
+const keyLight = new DirectionalLight("#ffb36b", 2.4);
 keyLight.position.set(6, 10, 4);
 keyLight.shadow.bias = -0.0008;
 keyLight.shadow.normalBias = 0.02;
 scene.add(keyLight);
 scene.add(keyLight.target);
-const fillLight = new DirectionalLight("#7a6cff", 0.55 / PI);
+const fillLight = new DirectionalLight("#7a6cff", 0.55);
 fillLight.position.set(-6, 5, -3);
 scene.add(fillLight);
-const ambient = new AmbientLight("#5c4a7a", 0.5 / PI);
+const ambient = new AmbientLight("#5c4a7a", 0.5);
 scene.add(ambient);
-const hemi = new HemisphereLight("#7a6cff", "#6b4a2f", 0.35 / PI);
+const hemi = new HemisphereLight("#7a6cff", "#6b4a2f", 0.35);
 scene.add(hemi);
 let ambientBase = 0.5;
 
@@ -598,13 +599,15 @@ function recolorCells(): void {
   }
   if (cellMesh.instanceColor) cellMesh.instanceColor.needsUpdate = true;
 }
-/** The key light's shadow fitted around the board (the engine fits by distance, not ortho bounds). */
+/** Fit the key light's shadow box tightly around the board (plus jewel height), scene.js _fitShadow. */
 function fitShadow(): void {
   const half = Math.max(width, height) * CELL * 0.5 + 1.2;
   const dir = new Vector3(6, 10, 4).normalize();
   keyLight.target.position.set(0, 0, 0);
   keyLight.position.copy(dir).multiplyScalar(half + 8);
-  keyLight.shadow.distance = half * 2 + 16;
+  const sh = keyLight.shadow.camera as OrthographicCamera;
+  sh.left = -half; sh.right = half; sh.top = half; sh.bottom = -half; sh.near = 0.5; sh.far = half * 2 + 16;
+  sh.updateProjectionMatrix();
 }
 function addCrate(i: number, hp: number): void {
   const p = cellPos(i);
@@ -1209,8 +1212,8 @@ export function setCameraPreset(name: string): void { cameraPreset = CAMERA_PRES
 // -- theme, palette, look, cosmetics -----------------------------------------------------------------------------
 function applyLightBalance(): void {
   const ibl = !!look && look.reflections;
-  ambient.intensity = (ambientBase * (ibl ? 0.55 : 1)) / PI;
-  hemi.intensity = (ibl ? 0.3 : 0.45) / PI;
+  ambient.intensity = ambientBase * (ibl ? 0.55 : 1);
+  hemi.intensity = ibl ? 0.3 : 0.45;
 }
 export function setTheme(t: Theme): void {
   theme = t;
@@ -1226,9 +1229,9 @@ export function setTheme(t: Theme): void {
   fog.color.set(t.fog.color);
   fog.density = t.fog.density;
   keyLight.color.set(t.light.key);
-  keyLight.intensity = t.light.keyIntensity / PI;
+  keyLight.intensity = t.light.keyIntensity;
   fillLight.color.set(t.light.fill);
-  fillLight.intensity = t.light.fillIntensity / PI;
+  fillLight.intensity = t.light.fillIntensity;
   ambient.color.set(t.light.ambient);
   hemi.color.set(t.light.fill);
   hemi.groundColor.set(t.table.color);
@@ -1292,6 +1295,7 @@ export function applyLook(next: Look): void {
   keyLight.castShadow = shadows;
   if (shadows) keyLight.shadow.mapSize = next.shadows;
   scene.environment = next.reflections ? envMap() : null;
+  applyEnv();
   applyLightBalance();
   pCap = Math.max(16, Math.min(SPARK_MAX, b.sparks));
   pHead = pHead % pCap;
@@ -1356,7 +1360,18 @@ function springVec(cur: Vector3, vel: Vector3, target: Vector3, k: number, d: nu
   cur.x += vel.x * dt; cur.y += vel.y * dt; cur.z += vel.z * dt;
 }
 /** Each rendered frame: particles, decor, the camera spring and shake, marker pulses. */
+/** three r161 scaled scene.environment by each material's envMapIntensity; the engine (as r163+)
+ * does that only for a material's own envMap, so every standard material carries the room itself. */
+function applyEnv(): void {
+  const env = scene.environment;
+  scene.traverse((o) => {
+    const m = (o as Mesh).material as MeshStandardMaterial | MeshStandardMaterial[] | undefined;
+    if (!m) return;
+    for (const x of Array.isArray(m) ? m : [m]) if (x instanceof MeshStandardMaterial && x.envMap !== env) x.envMap = env;
+  });
+}
 export function update(dtIn: number, time: number): void {
+  applyEnv();
   const dt = Math.min(0.1, Math.max(0, dtIn));
   if (!paused) {
     updateParticles(dt);
