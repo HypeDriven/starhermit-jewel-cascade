@@ -1322,12 +1322,12 @@ export function applyLook(next: Look): void {
     denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
   };
   // High threshold: only lamps, glints, specials and specular highlights bloom (UnrealBloomPass 0.45, 0.4, 0.92).
-  // minor 29 bloom follows r185 UnrealBloomPass: an r161 page squares its strength (0.45² ≈ 0.2)
-  renderer.bloom = next.bloom ? { strength: 0.2025, radius: 0.4, threshold: 0.92, resolution: b.bloomRes } : null;
+  // minor 30: bloom model "r160" (the r161 page's UnrealBloomPass) at the page strength
+  renderer.bloom = next.bloom ? { model: "r160", strength: 0.45, radius: 0.4, threshold: 0.92, resolution: b.bloomRes } : null;
   // The GradeShader after OutputPass (display space): a gentle S-curve (slope ~1.11 at mid-grey), +12 %
   // saturation, warm highlights / violet shadows, the 0.26 vignette.
   renderer.grade = next.grade ? {
-    space: "display", contrast: 0.11, saturation: 1.12,
+    space: "display", contrastCurve: "s", contrast: 0.22, saturation: 1.12,
     shadows: [0.97, 0.95, 1.05], highlights: [1.04, 1.0, 0.95], split: [0.2, 0.8],
     vignette: { amount: 0.26, inner: 0.38, outer: 0.9, scale: [1, 0.85] },
   } : null;
