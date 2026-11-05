@@ -17,9 +17,9 @@
 // the runtime's Options (music, effects and interface buses, mute, voice
 // limit); its old bus balance is folded into the gains here. The M key still
 // silences the game's own sounds (Settings › Mute game sounds). The synthesized
-// stand-ins it played while a clip loaded are not ported. Clips load once the
-// mixer runs (natively at once, in a browser after the first press), one at a
-// time.
+// stand-ins it played while a clip loaded are not ported. Every clip loads
+// at once in onStart; the voices, the loops' rendering and the music wait for
+// the mixer to run (in a browser, after the first press).
 import { frame } from "starhermit:engine";
 import { vibrate as deviceVibrate } from "starhermit:input";
 import { context, createClip, loadClip, play as playClip, type AudioClip, type Bus, type Sound } from "starhermit:audio";
@@ -38,7 +38,7 @@ const UI_SFX: Record<string, string> = {
 /** Menu sounds play on the interface bus; the rest are effects. */
 const INTERFACE = new Set(["ui-modal-open", "ui-modal-close", "ui-confirm", "ui-back", "ui-click", "ui-hover", "ui-toggle", "ui-tab-switch",
   "ui-scroll-tick", "ui-toast", "ui-pause", "ui-resume", "ui-settings-saved", "ui-countdown-tick"]);
-/** Load order: the most frequent first. */
+/** The recorded clips. */
 const FILES = [
   "gem-select", "gem-swap", "match-chime", "ui-error", "ui-click", "ui-confirm", "ui-countdown-tick", "combo-tier-2", "combo-tier-3",
   "cascade", "special-forge", "ray-fire", "bloom-burst", "prism-burst", "ice-crack", "crate-break", "board-shuffle", "goal-complete",
@@ -48,13 +48,11 @@ const FILES = [
 ];
 
 const clips = new Map<string, AudioClip>();
-const queue: string[] = [...FILES];
-let loading = false;
-function pump(): void {
-  if (loading || !queue.length) return;
-  const name = queue.shift()!;
-  loading = true;
-  loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); loading = false; }, (e: unknown) => { console.warn(`sfx ${name}: ${String(e)}`); loading = false; });
+/** Loads every clip at once (onStart); a sound whose clip is still loading is skipped. */
+export function loadSfx(): void {
+  for (const name of FILES) {
+    loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
+  }
 }
 
 let muted = false;
@@ -77,7 +75,7 @@ function playFile(name: string, gain = 1): boolean {
   if (!clip) return false;
   const bus: Bus = INTERFACE.has(name) ? "interface" : "effects";
   try { playClip(clip, { bus, gain }); return true; }
-  catch { clips.delete(name); queue.push(name); return false; } // a clip the mixer lost: load it again
+  catch { return false; } // the mixer is full this frame: skip it
 }
 
 // -- captions and vibration ----------------------------------------------------------------------
@@ -312,7 +310,7 @@ function startLoops(key: string, l: Loops): void {
 }
 
 let lastUpdate = 0;
-/** Each frame: the clips once the mixer runs (one at a time), the loops' rendering, the crossfade. */
+/** Each frame once the mixer runs: the voices, the loops' rendering, the crossfade. */
 export function update(): void {
   const now = frame().time;
   for (let i = fading.length - 1; i >= 0; i--) {
@@ -320,8 +318,6 @@ export function update(): void {
   }
   if (context.state !== "running") return;
   makeVoices();
-  pump();
-  if (loading || queue.length) return;
   // Render the wanted theme's loops a slice a frame.
   if (!rendered.has(wantKey)) {
     if (!job || job.key !== wantKey) { startJob(wantKey, "pad"); }

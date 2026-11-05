@@ -18,7 +18,7 @@
 // engine's convention); the post chain (GTAO → UnrealBloom → OutputPass →
 // grade → SMAA/FXAA, or MSAA) is renderer.ao / bloom / grade (display space,
 // as the GradeShader ran after OutputPass) / antialias; the key light's
-// shadow is fitted by `distance` (the engine has no ortho shadow bounds);
+// shadow box is the light's orthographic shadow.camera, fitted to the board (fitShadow);
 // timelines run on the runtime's fixed steps (tick) instead of setTimeout and
 // performance.now, so a round looks the same in every run; adaptive
 // resolution, the pixel-ratio cap and the frame-rate readout are the

@@ -873,6 +873,7 @@ onStart(() => {
   session = new Sess.GameSession({ settings, progress });
   wireSession();
   render.setHandlers(swap, () => audio.cue("select"));
+  audio.loadSfx();
   audio.setMuted(!!settings.audio.muted);
   audio.setOnCaption((key, vars) => {
     if (!settings.access.captions) return;

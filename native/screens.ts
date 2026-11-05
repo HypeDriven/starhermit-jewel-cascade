@@ -66,19 +66,9 @@ function button(b: Btn, width: number | null = null): void {
 }
 /** Buttons at their own widths in rows that wrap at `width` (CSS flex-wrap). */
 function flow(label: string, list: Btn[], width: number, align: "start" | "center" | "end" = "start", gap = 8): void {
-  const rows: Btn[][] = [[]];
-  let used = 0;
-  for (const b of list) {
-    const bw = Math.min(width, b.width ?? buttonWidth(b.text, b.style ?? PLAIN));
-    if (rows[rows.length - 1]!.length && used + gap + bw > width) { rows.push([]); used = 0; }
-    used += (rows[rows.length - 1]!.length ? gap : 0) + bw;
-    rows[rows.length - 1]!.push(b);
-  }
-  ui.column(label, () => {
-    rows.forEach((row, ri) => ui.row(`${label}-r${ri}`, () => {
-      for (const b of row) button(b, b.width ?? (buttonWidth(b.text, b.style ?? PLAIN) > width ? width : null));
-    }, { spacing: gap, align: "center" }));
-  }, { spacing: gap, align, width });
+  ui.row(label, () => {
+    for (const b of list) button(b, b.width ?? (buttonWidth(b.text, b.style ?? PLAIN) > width ? width : null));
+  }, { wrap: true, width, gap, justify: align, align: "center" });
 }
 /** Text up to `width` wide: one label when it fits, else a paragraph. */
 function para(text: string, width: number, cls = "body", id?: string, center = false): void {
@@ -672,18 +662,10 @@ const COSMETIC_NAMES: Record<string, string> = {
 const COSMETIC_TYPES: Record<string, string> = { theme: N("theme"), trail: N("trail"), frame: N("frame"), title: N("title") };
 function cosmeticName(id: string): string { return COSMETIC_NAMES[id] ? T(COSMETIC_NAMES[id]!) : id; }
 function pills(id: string, list: string[], w: number): void {
-  const rows: string[][] = [[]];
-  let used = 0;
-  for (const t of list) {
-    const pw = textWidth(t, "ach-pill") + 8;
-    if (rows[rows.length - 1]!.length && used + pw > w) { rows.push([]); used = 0; }
-    rows[rows.length - 1]!.push(t);
-    used += pw;
-  }
-  ui.column(id, () => rows.forEach((row, ri) => ui.row(`${id}-${ri}`, () => row.forEach((t, k) => {
-    if (textWidth(t, "ach-pill") > w) ui.style("ach-pill").id(`${id}-${ri}-${k}`).paragraph(t, w - 28);
-    else ui.style("ach-pill").id(`${id}-${ri}-${k}`).label(t);
-  }), { spacing: 8 })), { spacing: 8, width: w });
+  ui.row(id, () => list.forEach((t, k) => {
+    if (textWidth(t, "ach-pill") > w) ui.style("ach-pill").id(`${id}-${k}`).paragraph(t, w - 28);
+    else ui.style("ach-pill").id(`${id}-${k}`).label(t);
+  }), { wrap: true, width: w, gap: 8 });
 }
 function xpBar(id: string, pct: number, w: number): void {
   ui.widget("", {
