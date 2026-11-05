@@ -1293,6 +1293,7 @@ export function applyLook(next: Look): void {
   const shadows = next.shadows > 0;
   renderer.shadowMap.enabled = shadows;
   keyLight.castShadow = shadows;
+  // The level's map size: at engine.minor ≥ 23 the engine keeps whatever the game sets.
   if (shadows) keyLight.shadow.mapSize = next.shadows;
   scene.environment = next.reflections ? envMap() : null;
   applyEnv();
@@ -1314,16 +1315,18 @@ export function applyLook(next: Look): void {
   setMap(frameMat, "roughnessMap", detailed && tex ? tex.brushed : null);
   for (const m of jewelMats) m.clearcoat = detailed && b.clearcoat ? 1 : 0;
   // Specials glow a little brighter when bloom can pick them up.
-  const glow = next.bloom ? 1.7 : 1;
+  const glow = next.bloom !== null ? 1.7 : 1;
   bloomMat.emissiveIntensity = 0.7 * glow;
   prismMat.emissiveIntensity = 0.9 * glow;
-  renderer.ao = next.ao === "off" ? null : {
-    blendIntensity: 0.75, radius: 0.35, distanceExponent: 1.4, thickness: 1.0, scale: 1.0, samples: next.ao === "high" ? 16 : 8, resolution: b.aoRes,
-    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: next.ao === "high" ? 6 : 4, rings: 2, samples: next.ao === "high" ? 16 : 8, radiusExponent: 2 },
+  // The level's AO; full resolution is the engine's "high" (the old Ultra's wider denoise).
+  const ao = next.ao, full = !!ao && ao.resolution >= 1;
+  renderer.ao = ao && {
+    blendIntensity: 0.75, radius: 0.35, distanceExponent: 1.4, thickness: 1.0, scale: 1.0, samples: ao.samples, resolution: ao.resolution,
+    denoise: { lumaPhi: 10, depthPhi: 2, normalPhi: 3, radius: full ? 6 : 4, rings: 2, samples: ao.denoiseSamples, radiusExponent: 2 },
   };
   // High threshold: only lamps, glints, specials and specular highlights bloom (UnrealBloomPass 0.45, 0.4, 0.92).
   // minor 30: bloom model "r160" (the r161 page's UnrealBloomPass) at the page strength
-  renderer.bloom = next.bloom ? { model: "r160", strength: 0.45, radius: 0.4, threshold: 0.92, resolution: b.bloomRes } : null;
+  renderer.bloom = next.bloom === null ? null : { model: "r160", strength: 0.45, radius: 0.4, threshold: 0.92, resolution: next.bloom };
   // The GradeShader after OutputPass (display space): a gentle S-curve (slope ~1.11 at mid-grey), +12 %
   // saturation, warm highlights / violet shadows, the 0.26 vignette.
   renderer.grade = next.grade ? {

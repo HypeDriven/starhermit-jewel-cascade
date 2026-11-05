@@ -383,12 +383,17 @@ the camera is a critically damped 1.6 Hz spring with tiny tiered shake. Timeline
 runtime's fixed steps. Reduced motion (the runtime's option) zeroes shake, caps bursts at 3
 particles, skips the win celebration and stops dust, lamp flicker, star shimmer and glints.
 
-**Graphics levels.** The runtime's Options choose the level (Auto by default); its quality tier
-picks the browser build's preset (`native/quality.ts`):
+**Graphics levels.** The runtime's Options choose the level (Auto by default). Shadows and their map
+size, ambient occlusion, bloom, the grade, anti-aliasing and the largest texture are the level's own
+(`levelSettings()`, the table every StarHermit game reads); its quality tier picks the browser build's
+art preset (`native/quality.ts`). At each tier's anchor level (quantum, molecular, terrestrial,
+galactic; higher levels within a tier get more, e.g. stellar's 4096 shadows and full-resolution AO 16).
+Low keeps MSAA while engine 1.36.1's anti-aliasing "off" recolours translucent overlays (the level
+asks for none):
 
 | | Low | Balanced | High | Ultra |
 |---|---|---|---|---|
-| Shadows (key light) | off | 512 | 1024 | 2048 (held to the level's cap) |
+| Shadows (key light, the level's map) | off | 1024 | 2048 | 4096 |
 | Ambient occlusion (`renderer.ao`) | off | off | on | high |
 | Bloom 0.45 / 0.4 / threshold 0.92 | off | ½ res | ½ res | full res |
 | Colour grade (display space: contrast 0.11, saturation 1.12, warm highlights / violet shadows, vignette 0.26) | off | on | on | on |
@@ -399,7 +404,7 @@ picks the browser build's preset (`native/quality.ts`):
 | Animated background | no | yes | yes | yes |
 | Surface detail (props, wood, tiles, brass) / texture size | plain | 256 | 512 + clearcoat | 1024 + clearcoat |
 
-Sparks and dust scale up to 2× within a tier with the level index. Render scale, the pixel-ratio
+Sparks and dust scale up to 2× within a tier with the level's particle budget over the anchor's. Render scale, the pixel-ratio
 cap, adaptive resolution, the frame-rate limit and the FPS readout are the runtime's.
 
 ---
@@ -419,8 +424,8 @@ apart through a lowpass, breathing at 0.09 Hz) under a 16-step seeded pentatonic
 pad and both pluck layers are rendered once per theme into seamless loops (a slice a frame) and
 played looping; nothing sounds before the first press in a browser.
 
-**Determinism and cost control.** Melodies are seeded per theme (`music-<ambience>`); clips load one
-at a time once the mixer runs. Fall and spawn ticks and the crate *damage* thud are rendered short
+**Determinism and cost control.** Melodies are seeded per theme (`music-<ambience>`); every clip
+loads at once at start. Fall and spawn ticks and the crate *damage* thud are rendered short
 clips (synth-only by design), quiet and rate-limited to 14/s with a 55 ms floor. **Captions** (Settings ›
 *Captions for audio cues*) show each cue as a toast (`[chime rising x3]`, `[big blast]`, `[ice crack]`,
 `[time warning]`) for 1.6 s. Rejects, chimes and blasts vibrate the device (the runtime's vibration

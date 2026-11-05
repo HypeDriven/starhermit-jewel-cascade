@@ -1,0 +1,34 @@
+# Graphics-tier bench (tools/engine-tier-bench.mjs): Journey stage 1, measured over the first
+# hinted swap and its cascade (sparks, dust, the lamp, the board), then the idle board.
+until 600 Jewel Cascade
+frames 30
+click =Play
+until 120 Choose a mode
+frames 10
+click =Journey. 40 authored stages with growing mechanics.
+until 120 stages complete
+frames 10
+click =Stage 1
+until 120 Expected duration
+frames 10
+click =Start
+until 600 =Your move
+frames 120
+measure start
+key ArrowUp 1
+frames 1
+key ArrowUp 1
+frames 1
+key ArrowLeft 1
+frames 1
+key ArrowLeft 1
+frames 1
+key Enter 1
+frames 2
+key ArrowRight 1
+frames 1
+key Enter 1
+frames 8
+until 1500 =Your move
+frames 300
+measure stop
