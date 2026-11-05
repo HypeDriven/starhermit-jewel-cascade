@@ -80,9 +80,7 @@ export function lookFor(s: LevelSettings = levelSettings()): Look {
     ao: s.ao && { resolution: s.ao.resolution, samples: s.ao.samples, denoiseSamples: s.ao.denoiseSamples },
     bloom: s.bloom ? s.bloom.resolution : null,
     grade: s.grade,
-    // Engine 1.36.1 bug: antialias "off" recolours fog, haze and translucent overlays; the old Low's MSAA
-    // stays until engine 1.36.2 (drop this clamp when pinning 1.36.2+).
-    antialias: s.antialias === "off" ? "msaa" : s.antialias,
+    antialias: s.antialias,
     budget: b,
   };
 }
