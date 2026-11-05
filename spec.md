@@ -16,7 +16,7 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | Players | 1, with asynchronous ranked comparison |
 | Session | 90 s – 4 min per round; a Journey act is ~20 min |
 | Platforms | The StarHermit client (native) and browsers (the engine's web runtime); desktop and phones, portrait and landscape |
-| Engine | StarHermit engine script game, pinned to engine **1.36.1** (host API 1.32, `engine.minor=32`) |
+| Engine | StarHermit engine script game, pinned to engine **1.36.2** (host API 1.32, `engine.minor=32`) |
 | Rendering | `starhermit:scene` tabletop scene, `starhermit:ui` menus and HUD, with a complete text board as an equal play path |
 | Entry point | `native/main.ts` (`engine.entry`); browsers open the loader `index.html` (`launch`) |
 
@@ -388,7 +388,7 @@ size, ambient occlusion, bloom, the grade, anti-aliasing and the largest texture
 (`levelSettings()`, the table every StarHermit game reads); its quality tier picks the browser build's
 art preset (`native/quality.ts`). At each tier's anchor level (quantum, molecular, terrestrial,
 galactic; higher levels within a tier get more, e.g. stellar's 4096 shadows and full-resolution AO 16).
-Low keeps MSAA while engine 1.36.1's anti-aliasing "off" recolours translucent overlays (the level
+Low keeps MSAA while engine 1.36.2's anti-aliasing "off" recolours translucent overlays (the level
 asks for none):
 
 | | Low | Balanced | High | Ultra |
