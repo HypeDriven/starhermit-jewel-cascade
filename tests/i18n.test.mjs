@@ -1,20 +1,17 @@
 // Localization coverage: every English key the native client and the content
 // use is translated in every locale (en-GB → en-US, es-ES → es-419, fr-CA →
-// fr-FR inherit), placeholders survive, no table row is unused, and the account
-// strings are complete in all nine locales. Run: node --test tests/i18n.test.mjs
+// fr-FR inherit), placeholders survive and no table row is unused. Run: node --test tests/i18n.test.mjs
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { readFileSync, readdirSync } from 'node:fs';
-import { codeKeys, audit, LOCALES } from './i18n-common.mjs';
-import '../js/strings.js';
-import { SH_ALL } from '../js/account-strings.js';
+import { codeKeys, audit } from './i18n-common.mjs';
 import * as content from '../js/engine/content.js';
 import { ACHIEVEMENTS } from '../js/engine/achievements.js';
 import { THEMES } from '../js/engine/themes.js';
 
 const ROOT = new URL('../', import.meta.url);
 const read = (p) => readFileSync(new URL(p, ROOT), 'utf8');
-const TABLES = globalThis.JC_STRINGS;
+const TABLES = JSON.parse(read('assets/strings.json'));
 // Names that stay as they are in every language.
 const NAMES = new Set(['Jewel Cascade', 'StarHermit']);
 
@@ -43,12 +40,6 @@ export function usedKeys() {
 
 test('every used key is translated in every locale; placeholders intact; no unused rows', () => {
   assert.deepEqual(audit(TABLES, usedKeys()), []);
-});
-
-test('account strings exist in all nine locales with the same keys', () => {
-  const keys = Object.keys(SH_ALL['en-US']).sort();
-  for (const l of LOCALES) assert.deepEqual(Object.keys(SH_ALL[l] ?? {}).sort(), keys, l);
-  for (const l of LOCALES) assert.ok(SH_ALL[l].lbRank.includes('{rank}') && SH_ALL[l].copyFailed.includes('{link}'), l);
 });
 
 test('en-GB, es-ES and fr-CA carry their regional differences', () => {

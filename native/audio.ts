@@ -9,20 +9,21 @@
 // intensity layer (an off-grid arp a fifth up) crossfaded in by cascade depth
 // and decaying back over ~3 s. The browser build ran the pad and the plucks
 // as live oscillators; here each is rendered once into a seamless loop
-// (createClip, a slice a frame: the native interpreter is slow) and played
-// looping on the music bus. The quiet fall/spawn ticks and the crate thud
-// were synth-only by design: they are rendered into short clips too.
+// (OfflineAudioContext, one context a stem) and played looping on the music
+// bus. The quiet fall/spawn ticks and the crate thud were synth-only by
+// design: they are rendered into short clips too.
 //
 // The browser build's Master / Music / Effects / Ambience / Voice sliders are
 // the runtime's Options (music, effects and interface buses, mute, voice
 // limit); its old bus balance is folded into the gains here. The M key still
-// silences the game's own sounds (Settings › Mute game sounds). The synthesized
-// stand-ins it played while a clip loaded are not ported. Every clip loads
-// at once in onStart; the voices, the loops' rendering and the music wait for
-// the mixer to run (in a browser, after the first press).
+// silences the game's own sounds (Settings › Mute game sounds; the engine's
+// game-level setMuted, the option stays in the settings). The synthesized
+// stand-ins it played while a clip loaded are not ported. Every clip and voice
+// loads at once in onStart; sounds and the music wait for the mixer to run (in
+// a browser, after the first press).
 import { frame } from "starhermit:engine";
 import { vibrate as deviceVibrate } from "starhermit:input";
-import { context, createClip, loadClip, play as playClip, type AudioClip, type Bus, type Sound } from "starhermit:audio";
+import { context, createClip, loadClip, OfflineAudioContext, play as playClip, setMuted as setGameMuted, type AudioClip, type Bus, type Sound } from "starhermit:audio";
 import { Rng, type RulesEvent } from "./game.ts";
 
 const SPECIAL_RAY_H = 1, SPECIAL_RAY_V = 2, SPECIAL_BLOOM = 3, SPECIAL_PRISM = 4;
@@ -53,6 +54,7 @@ export function loadSfx(): void {
   for (const name of FILES) {
     loadClip(`sfx/${name}.opus`).then((c) => { clips.set(name, c); }, (e: unknown) => console.warn(`sfx ${name}: ${String(e)}`));
   }
+  void loadVoices();
 }
 
 let muted = false;
@@ -60,14 +62,14 @@ let suspended = false;
 /** The game's own mute (the M key / Settings), on top of the runtime's volumes. */
 export function setMuted(on: boolean): void {
   muted = on;
-  applyLoopGains(0.4);
+  setGameMuted(on);
 }
 /** A hidden window: the loops fall silent (js/audio.js suspend/resume). */
 export function setSuspended(on: boolean): void {
   suspended = on;
   applyLoopGains(0.2);
 }
-const audible = (): boolean => !muted && !suspended && context.state === "running";
+const audible = (): boolean => !suspended && context.state === "running";
 
 function playFile(name: string, gain = 1): boolean {
   if (!audible()) return false;
@@ -91,27 +93,26 @@ function vibrate(ms: number | number[]): void {
 
 // -- rendered voices: fall/spawn ticks and the crate thud ------------------------------------------
 const TICK_RATE = 22050;
-function renderTone(freq: number, dur: number, gain: number, freqEnd = 0): Float32Array {
-  const n = Math.round(dur * TICK_RATE);
-  const out = new Float32Array(n);
-  let ph = 0;
-  for (let i = 0; i < n; i++) {
-    const t = i / TICK_RATE;
-    const f = freqEnd > 0 ? freq * Math.pow(freqEnd / freq, t / dur) : freq;
-    ph += f / TICK_RATE;
-    const env = t < 0.008 ? t / 0.008 : Math.pow(0.0001, (t - 0.008) / Math.max(0.001, dur - 0.008));
-    out[i] = Math.sin(2 * Math.PI * ph) * env * gain;
-  }
-  return out;
+/** A sine with an 8 ms attack and an exponential decay to 0.0001, sweeping to freqEnd when given. */
+async function renderTone(freq: number, dur: number, gain: number, freqEnd = 0): Promise<AudioClip> {
+  const off = new OfflineAudioContext(1, Math.round(dur * TICK_RATE), TICK_RATE);
+  const osc = off.createOscillator();
+  osc.frequency.setValueAtTime(freq, 0);
+  if (freqEnd > 0) osc.frequency.exponentialRampToValueAtTime(freqEnd, dur);
+  const env = off.createGain();
+  env.gain.setValueAtTime(0, 0);
+  env.gain.linearRampToValueAtTime(gain, 0.008);
+  env.gain.exponentialRampToValueAtTime(gain * 0.0001, dur);
+  osc.connect(env).connect(off.destination);
+  osc.start();
+  return createClip(await off.startRendering());
 }
 let tickFall: AudioClip | null = null, tickSpawn: AudioClip | null = null, thud: AudioClip | null = null;
-function makeVoices(): void {
-  if (tickFall) return;
+async function loadVoices(): Promise<void> {
   try {
-    tickFall = createClip([renderTone(880, 0.03, 0.028 * 2)], TICK_RATE);
-    tickSpawn = createClip([renderTone(1050, 0.03, 0.028 * 2)], TICK_RATE);
-    const a = renderTone(190, 0.1, 0.18 * 1.6, 90);
-    thud = createClip([a], TICK_RATE);
+    [tickFall, tickSpawn, thud] = await Promise.all([
+      renderTone(880, 0.03, 0.028 * 2), renderTone(1050, 0.03, 0.028 * 2), renderTone(190, 0.1, 0.18 * 1.6, 90),
+    ]);
   } catch (e) { console.warn(`audio: ${String(e)}`); }
 }
 let lastTickAt = 0, tickWindowStart = 0, tickCount = 0;
@@ -199,11 +200,9 @@ const PAD_GAIN = 0.05 * (0.55 / 0.65);
 const PAD_RATE = 11025, PLUCK_RATE = 22050;
 const PAD_S = 1 / 0.09, PLUCK_S = 8;
 
-interface Render { key: string; part: "pad" | "calm" | "intense"; pos: number; buf: Float32Array; state: number[] }
 interface Loops { pad: AudioClip; calm: AudioClip; intense: AudioClip }
 const rendered = new Map<string, Loops>();
-let job: Render | null = null;
-const partial: Partial<Record<Render["part"], Float32Array>> = {};
+const rendering = new Set<string>();
 
 function pattern(key: string): (number | null)[] {
   const r = new Rng.Rng(Rng.fnv1a("music-" + key));
@@ -211,55 +210,69 @@ function pattern(key: string): (number | null)[] {
   for (let i = 0; i < 16; i++) out.push(r.next() < 0.68 ? PENTA[r.int(PENTA.length)]! : null);
   return out;
 }
-/** Renders `count` samples of the job; true when its part is done. */
-function renderSlice(j: Render, count: number): boolean {
-  const root = AMBIENCE_ROOTS[j.key]!;
-  if (j.part === "pad") {
-    // Two sines a fifth apart (−4 / +4 cents), each rounded to whole cycles in the loop,
-    // through two one-pole lowpasses at 620 Hz; the gain breathes ±45 % at 0.09 Hz.
-    const N = j.buf.length;
-    const fa = Math.round(root * Math.pow(2, -4 / 1200) * PAD_S) / PAD_S;
-    const fb = Math.round(root * 1.5 * Math.pow(2, 4 / 1200) * PAD_S) / PAD_S;
-    const k = 1 - Math.exp(-2 * Math.PI * 620 / PAD_RATE);
-    const end = Math.min(2 * N, j.pos + count);
-    for (; j.pos < end; j.pos++) {
-      const i = j.pos % N, t = i / PAD_RATE;
-      const x = Math.sin(2 * Math.PI * fa * t) + Math.sin(2 * Math.PI * fb * t);
-      j.state[0] = j.state[0]! + k * (x - j.state[0]!);
-      j.state[1] = j.state[1]! + k * (j.state[0]! - j.state[1]!);
-      // Two passes over the loop: the second starts from the first's end state (no click at the seam).
-      if (j.pos >= N) j.buf[i] = j.state[1]! * PAD_GAIN * (1 + 0.45 * Math.sin(2 * Math.PI * 0.09 * t));
-    }
-    return j.pos >= 2 * N;
+/** Two sines a fifth apart (−4 / +4 cents), each rounded to whole cycles in the loop, through a
+ * lowpass at 620 Hz (Q −6.02 dB: the old two one-poles); the gain breathes ±45 % at 0.09 Hz.
+ * Two passes over the loop, the second kept: the filter has settled, so the seam doesn't click. */
+async function renderPad(root: number): Promise<AudioClip> {
+  const N = Math.round(PAD_S * PAD_RATE);
+  const off = new OfflineAudioContext(1, 2 * N, PAD_RATE);
+  const lp = off.createBiquadFilter();
+  lp.type = "lowpass"; lp.frequency.value = 620; lp.Q.value = -6.02;
+  const breath = off.createGain();
+  breath.gain.value = PAD_GAIN;
+  const lfo = off.createOscillator();
+  lfo.frequency.value = 0.09;
+  const depth = off.createGain();
+  depth.gain.value = 0.45 * PAD_GAIN;
+  lfo.connect(depth).connect(breath.gain);
+  lp.connect(breath).connect(off.destination);
+  for (const f of [root * Math.pow(2, -4 / 1200), root * 1.5 * Math.pow(2, 4 / 1200)]) {
+    const osc = off.createOscillator();
+    osc.frequency.value = Math.round(f * PAD_S) / PAD_S;
+    osc.connect(lp);
+    osc.start();
   }
-  // Plucks: triangle notes with a 12 ms attack and a 0.5 s exponential decay, wrapped round the loop.
-  const N = j.buf.length;
-  const pat = pattern(j.key);
-  const base = root * 2;
-  const end = Math.min(16, j.pos + Math.max(1, Math.floor(count / 11000)));
-  for (; j.pos < end; j.pos++) {
-    const degree = pat[j.pos];
-    if (degree === null || degree === undefined) continue;
-    const f0 = semitone(base, degree);
-    const f = j.part === "calm" ? f0 : semitone(f0, 7);
-    const at = j.pos * 0.5 + (j.part === "calm" ? 0 : 0.25);
-    const gain = j.part === "calm" ? 0.16 : 0.1;
-    const len = Math.round(0.55 * PLUCK_RATE);
-    const s0 = Math.round(at * PLUCK_RATE);
-    for (let n = 0; n < len; n++) {
-      const t = n / PLUCK_RATE;
-      const ph = (f * t) % 1;
-      const tri = 1 - 4 * Math.abs(ph - 0.5);
-      const env = t < 0.012 ? (t / 0.012) * gain : gain * Math.pow(0.0001 / gain, Math.min(1, (t - 0.012) / 0.488));
-      const idx = (s0 + n) % N;
-      j.buf[idx] = j.buf[idx]! + tri * env;
-    }
-  }
-  return j.pos >= 16;
+  lfo.start();
+  const r = await off.startRendering();
+  return createClip([r.getChannelData(0).slice(N)], PAD_RATE);
 }
-function startJob(key: string, part: Render["part"]): void {
-  const n = part === "pad" ? Math.round(PAD_S * PAD_RATE) : PLUCK_S * PLUCK_RATE;
-  job = { key, part, pos: 0, buf: new Float32Array(n), state: [0, 0] };
+/** Triangle notes with a 12 ms attack and a 0.5 s exponential decay. Two passes over the loop, the
+ * second kept: the first pass's last notes ring into it, as they wrap round the loop. */
+async function renderPluck(key: string, part: "calm" | "intense"): Promise<AudioClip> {
+  const root = AMBIENCE_ROOTS[key]!;
+  const N = PLUCK_S * PLUCK_RATE;
+  const off = new OfflineAudioContext(1, 2 * N, PLUCK_RATE);
+  const gain = part === "calm" ? 0.16 : 0.1;
+  const pat = pattern(key);
+  for (let pass = 0; pass < 2; pass++) {
+    pat.forEach((degree, step) => {
+      if (degree === null) return;
+      const f0 = semitone(root * 2, degree);
+      const at = pass * PLUCK_S + step * 0.5 + (part === "calm" ? 0 : 0.25);
+      const osc = off.createOscillator();
+      osc.type = "triangle";
+      osc.frequency.value = part === "calm" ? f0 : semitone(f0, 7);
+      const env = off.createGain();
+      env.gain.setValueAtTime(0, 0);
+      env.gain.setValueAtTime(0, at);
+      env.gain.linearRampToValueAtTime(gain, at + 0.012);
+      env.gain.exponentialRampToValueAtTime(0.0001, at + 0.5);
+      osc.connect(env).connect(off.destination);
+      osc.start(at);
+      osc.stop(at + 0.55);
+    });
+  }
+  const r = await off.startRendering();
+  return createClip([r.getChannelData(0).slice(N)], PLUCK_RATE);
+}
+/** Renders a theme's loops once; they play when ready. */
+function renderLoops(key: string): void {
+  if (rendering.has(key)) return;
+  rendering.add(key);
+  Promise.all([renderPad(AMBIENCE_ROOTS[key]!), renderPluck(key, "calm"), renderPluck(key, "intense")]).then(
+    ([pad, calm, intense]) => { rendered.set(key, { pad, calm, intense }); },
+    (e: unknown) => { console.warn(`music: ${String(e)}`); },
+  );
 }
 
 let ambienceKey = "hearth";
@@ -310,33 +323,14 @@ function startLoops(key: string, l: Loops): void {
 }
 
 let lastUpdate = 0;
-/** Each frame once the mixer runs: the voices, the loops' rendering, the crossfade. */
+/** Each frame: the wanted theme's loops are asked for; once the mixer runs, the crossfade. */
 export function update(): void {
   const now = frame().time;
   for (let i = fading.length - 1; i >= 0; i--) {
     if (fading[i]!.at <= now) { for (const s of fading[i]!.sounds) { try { s.stop(); } catch { /* ended */ } } fading.splice(i, 1); }
   }
+  if (!rendered.has(wantKey)) { renderLoops(wantKey); return; }
   if (context.state !== "running") return;
-  makeVoices();
-  // Render the wanted theme's loops a slice a frame.
-  if (!rendered.has(wantKey)) {
-    if (!job || job.key !== wantKey) { startJob(wantKey, "pad"); }
-    const j = job!;
-    if (renderSlice(j, 6000)) {
-      partial[j.part] = j.buf;
-      if (j.part === "pad") startJob(wantKey, "calm");
-      else if (j.part === "calm") startJob(wantKey, "intense");
-      else {
-        try {
-          rendered.set(wantKey, {
-            pad: createClip([partial.pad!], PAD_RATE), calm: createClip([partial.calm!], PLUCK_RATE), intense: createClip([partial.intense!], PLUCK_RATE),
-          });
-        } catch (e) { console.warn(`music: ${String(e)}`); }
-        job = null;
-      }
-    }
-    return;
-  }
   if (!unlocked) return;
   const dt = Math.min(1, Math.max(0, now - lastUpdate));
   lastUpdate = now;

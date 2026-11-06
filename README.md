@@ -38,7 +38,7 @@ under `~/sh/runtime`.
 - `js/engine/` — pure deterministic rules, content, themes, achievements, RNG.
 - `js/session.js`, `js/storage.js`, `js/migrate.js` — round state machine,
   checksummed documents, the browser build's save/settings migration.
-- `js/strings.js`, `js/account-strings.js` — nine-locale translation tables.
+- `assets/strings.json` — nine-locale translation tables.
 - `score-script.js` — platform script posting ranked scores (`server=`).
 - `spec.md` — the running specification.
 

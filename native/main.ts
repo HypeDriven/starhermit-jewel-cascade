@@ -594,10 +594,9 @@ function postToLeaderboard(r: Results): void {
 export function leaderboardLine(): string | null {
   const r = app.lb;
   if (!r) return null;
-  const sh = account();
-  if (r === "posting") return sh.lbPosting;
-  if (!r.posted) return sh.lbNotPosted;
-  return r.rank ? sh.lbRank.replace("{rank}", String(r.rank)) : sh.lbPosted;
+  if (r === "posting") return account("leaderboardPosting");
+  if (!r.posted) return account("leaderboardNotPosted");
+  return r.rank ? account("leaderboardRank", { rank: r.rank }) : account("leaderboardPosted");
 }
 export function nextLabel(r: Results): string {
   if (r.mode === "journey" && r.won && r.contentId !== "j40") return T("Next stage");
@@ -705,8 +704,8 @@ export function copyInvite(): void {
   audio.cue("click");
   const link = platform.inviteLink();
   if (!link) return;
-  try { clipboard.writeText(link); toast(account().copied, "ok"); }
-  catch { toast(account().copyFailed.replace("{link}", link)); }
+  try { clipboard.writeText(link); toast(account("inviteCopied"), "ok"); }
+  catch { toast(account("inviteLink", { link })); }
 }
 export function signIn(): void { void requestSignIn().catch(() => undefined); }
 
@@ -891,10 +890,10 @@ onStart(() => {
 });
 platform.onSettingsChange(() => { applyGraphics(); applyTheme(); audio.setMuted(!!settings.audio.muted); });
 platform.onProgressMerged(() => toast(T("Cloud save applied."), "ok"));
-platform.onPlayer(() => { if (!platform.signedIn() && started) toast(account().signedOut); });
+platform.onPlayer(() => { if (!platform.signedIn() && started) toast(account("signedOut")); });
 let started = false;
 onPreferencesChange((p) => { render.setReducedMotion(p.reducedMotion); applyPalette(); });
-onSessionEnded(() => toast(account().signedOut));
+onSessionEnded(() => toast(account("signedOut")));
 let hidden = false;
 onSuspend(() => {
   hidden = true;

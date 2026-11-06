@@ -33,13 +33,12 @@ import { ink } from "./style.ts";
 // ------------------------------------------------------------------ layout
 interface Layout { lw: number; lh: number; sc: number; ox: number; oy: number; wide: boolean; phone: boolean; portrait: boolean; shortLand: boolean }
 function layoutNow(): Layout {
-  const f = frame();
-  const sc = ui.preferences().scale;
-  const sa = f.safeArea;
-  const lw = Math.max(1, (f.width - sa.left - sa.right) / sc), lh = Math.max(1, (f.height - sa.top - sa.bottom) / sc);
+  const v = ui.viewport!();
+  const sc = v.scale;
+  const lw = Math.max(1, v.width), lh = Math.max(1, v.height);
   const wide = lw >= 1024;
   const shortLand = !wide && lw > lh && lh <= 560;
-  return { lw, lh, sc, ox: sa.left / sc, oy: sa.top / sc, wide, phone: lw < 600, portrait: !wide && lh >= lw, shortLand };
+  return { lw, lh, sc, ox: v.x, oy: v.y, wide, phone: lw < 600, portrait: !wide && lh >= lw, shortLand };
 }
 const lastHeight = new Map<string, number>();
 const pr = (): ui.UiPreferences => ui.preferences();
@@ -207,8 +206,8 @@ function titleScreen(L: Layout, top: number): void {
       if (rowW <= w) ui.row("chips", () => chips.forEach(([id, t, s, act], i) => chip(id, t, s, cw[i]!, act)), { spacing: 8, align: "stretch" });
       else ui.column("chips", () => chips.forEach(([id, t, s, act]) => chip(id, t, s, Math.min(w, 320), act)), { spacing: 8, align: "center" });
       const acct: Btn[] = [];
-      if (platform.inviteLink()) acct.push({ id: "btn-invite", text: account().invite, style: ["btn-small"], act: copyInvite });
-      if (!platform.signedIn()) acct.push({ id: "btn-signin", text: account().signIn, style: ["btn-small"], act: signIn });
+      if (platform.inviteLink()) acct.push({ id: "btn-invite", text: account("invite"), style: ["btn-small"], act: copyInvite });
+      if (!platform.signedIn()) acct.push({ id: "btn-signin", text: account("signIn"), style: ["btn-small"], act: signIn });
       if (acct.length) flow("title-account", acct, w, "center");
     }, { spacing: 16, align: "center", width: w });
   }, false);

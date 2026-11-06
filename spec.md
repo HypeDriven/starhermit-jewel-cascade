@@ -42,7 +42,7 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | `js/session.js` | Round FSM, event bus, 100 ms clock, results, progression |
 | `js/storage.js` | Checksummed, versioned documents on a pluggable backend (`setBackend`) |
 | `js/migrate.js` | Reading the browser build's cloud save and account settings (pure) |
-| `js/strings.js`, `js/account-strings.js` | Translation tables (`globalThis.JC_STRINGS`) and the StarHermit account strings, nine locales |
+| `assets/strings.json` | Translation tables (the engine's `strings`), nine locales; the account lines are the engine's `starhermit.*` |
 | `assets/ui-style.json` | The style sheet, converted from `tools/ui-style.css` with `starhermit css` (`npm run css`) |
 | `assets/*.webp` | Title key art and results plate |
 | `sfx/*.opus` | 37 one-shots (`manifest.txt` canonical, `manifest.json` generator input; both left out of the package) |
@@ -388,8 +388,7 @@ size, ambient occlusion, bloom, the grade, anti-aliasing and the largest texture
 (`levelSettings()`, the table every StarHermit game reads); its quality tier picks the browser build's
 art preset (`native/quality.ts`). At each tier's anchor level (quantum, molecular, terrestrial,
 galactic; higher levels within a tier get more, e.g. stellar's 4096 shadows and full-resolution AO 16).
-Low keeps MSAA while engine 1.38.0's anti-aliasing "off" recolours translucent overlays (the level
-asks for none):
+Low asks for no anti-aliasing (the level's own):
 
 | | Low | Balanced | High | Ultra |
 |---|---|---|---|---|
@@ -397,7 +396,7 @@ asks for none):
 | Ambient occlusion (`renderer.ao`) | off | off | on | high |
 | Bloom 0.45 / 0.4 / threshold 0.92 | off | ½ res | ½ res | full res |
 | Colour grade (display space: contrast 0.11, saturation 1.12, warm highlights / violet shadows, vignette 0.26) | off | on | on | on |
-| Anti-aliasing | MSAA | FXAA | SMAA | MSAA |
+| Anti-aliasing | off | FXAA | SMAA | MSAA |
 | Reflections (IBL) | off | on | on | on |
 | Particles / sparks cap / glints | low / 512 / 0 | medium / 1024 / 6 | high / 2048 / 14 | high / 3072 / 14 |
 | Dust motes | 0 | 85 | 170 | 260 |
@@ -421,7 +420,7 @@ play on the interface bus. *Mute game sounds* (M) silences the game's own sounds
 per-theme pad chord (hearth G3, night F3, garden A3, frost B♭3, velvet A♭3: two detuned sines a fifth
 apart through a lowpass, breathing at 0.09 Hz) under a 16-step seeded pentatonic pluck stem on a
 0.5 s grid, with an intensity layer (an off-grid arp a fifth up) crossfaded in by cascade depth. The
-pad and both pluck layers are rendered once per theme into seamless loops (a slice a frame) and
+pad and both pluck layers are rendered once per theme into seamless loops (`OfflineAudioContext`, one context a stem) and
 played looping; nothing sounds before the first press in a browser.
 
 **Determinism and cost control.** Melodies are seeded per theme (`music-<ambience>`); every clip
@@ -486,8 +485,8 @@ Synth-only by design (no clip, deliberately): jewel fall and spawn ticks (`rules
 ## 10. Localization
 
 en-US, en-GB, es-419, es-ES, de-DE, fr-FR, fr-CA, pt-BR and it-IT. Every player-facing string goes
-through `T()` (`native/i18n.ts`) over `js/strings.js` (English source strings are the keys; en-GB,
-es-ES and fr-CA list only their differences) and `js/account-strings.js`; content names and
+through `T()` (`native/i18n.ts`) over `assets/strings.json` (English source strings are the keys; en-GB,
+es-ES and fr-CA list only their differences) and the engine's `starhermit.*`; content names and
 descriptions, achievement and cosmetic names, captions and the text board's cell descriptions
 included. "Jewel Cascade" and "StarHermit" stay as they are. The language is the runtime's
 interface language (Options › Language: the player's choice, else the account's preferred language,
@@ -532,7 +531,7 @@ the game makes no platform calls beyond public leaderboard reads.
 | Sign-in | `requestSignIn()` | *Sign in with StarHermit* on the title (guests) |
 | Clock | `serverTime()` / `serverNow()` | The Daily's UTC date and countdown follow the platform's clock (the device's offline) |
 | Leaderboards | `leaderboards.list/entries` | Boards › Global (top 25 of `high-score`, guests too), Friends (signed in, `friendsOnly`); Daily and unavailable boards show this device's bests |
-| Score posting | `sessions.practice()` + `connectGame` → `score-script.js` | Every finished ranked round (Daily, Challenge, Score chase) signed in: the results read "Posting score…", then "Leaderboard rank: #N" (or posted / not posted) |
+| Score posting | `leaderboards.submitScore` → `score-script.js` | Every finished ranked round (Daily, Challenge, Score chase) signed in: the results read "Posting score…", then "Leaderboard rank: #N" (or posted / not posted) |
 
 Results and leaderboards come only from `score-script.js` (range-checked integer, 0–1,000,000,
 higher is better): the client never reports a result to the platform itself. Replay verification
@@ -561,7 +560,7 @@ accepted swap and offered at start when it deserializes to a `ready` state.
 
 **Performance.** Cells are one instanced mesh, particles one `Points` draw over fixed arrays (only
 live ones updated), beams a pool of 8, jewel views pooled; procedural textures are made once per
-budget size; the music renders a slice a frame. Blended stars draw first (`renderOrder -10`) so
+budget size; the music renders offline in the engine. Blended stars draw first (`renderOrder -10`) so
 the table covers them.
 
 ---
