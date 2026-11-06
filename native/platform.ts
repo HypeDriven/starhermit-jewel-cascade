@@ -20,9 +20,8 @@
 // - the player (signed in or a guest) and their avatar, the invite link, the
 //   platform's clock for the Daily, the leaderboard reads for the Boards
 //   screen, and posting a finished ranked round's score through
-//   score-script.js (a practice session whose socket carries
-//   { type: 'result', scores }, as the JS SDK's submitScores did) with the
-//   rank on the high-score board.
+//   score-script.js (leaderboards.submitScore) with the rank on the
+//   high-score board.
 import type { JsonValue } from "starhermit:engine";
 import {
   avatar as fetchAvatar, inviteLink as fetchInviteLink, leaderboards, onPlayerChange, player, serverNow, serverTime,

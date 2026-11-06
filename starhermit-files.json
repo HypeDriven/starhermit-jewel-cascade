@@ -19,7 +19,7 @@
     "native/game.ts": {"sha256": "30faed1255ef08c0935b6b6e487f35810d6dd19bb8d2f57ef01e1b8b5fded635", "size": 10083},
     "native/i18n.ts": {"sha256": "d180c9964aab7f8c8505ad6c17f2a3ece4d0350ff35bb66f9b88325398353c57", "size": 2151},
     "native/main.ts": {"sha256": "e3bcec73d8b1ff7c2e96e87b64e18bcf01f619648d33369005ff78f4c2900c7b", "size": 41653},
-    "native/platform.ts": {"sha256": "2f434af4fee9cdbe863292a784fefaa252327f389405641a191a235d337e4eac", "size": 13295},
+    "native/platform.ts": {"sha256": "8e284a7d80cd88d62643c82b50314430da204e3e24f937c47c8d8c086dbf73bb", "size": 13214},
     "native/quality.ts": {"sha256": "8f5e77459d6a4760add0c58be2050824192ab00d9941fd67e8ffd358df8d626e", "size": 4317},
     "native/render.ts": {"sha256": "0e580c3463e4f9bc6ffc5e8c373a5231f4dac01cdf909313f04c6e84b1718fb8", "size": 65321},
     "native/screens.ts": {"sha256": "f5639e0675bcdf2a4a239558a47729975fb2dcd99c4fa0b5aa33ae4c930c8354", "size": 60129},
