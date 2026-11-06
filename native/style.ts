@@ -45,8 +45,8 @@ export function initStyles(): void {
       text: { color: "$ink" }, minHeight: 44,
       parts: { box: { background: "$bg-2", border: { width: 1, color: "$panel-line" }, radius: 4 }, mark: { background: "$accent" } },
     },
-    select: { text: { color: "$ink" }, background: "$bg-2", border: { width: 1, color: "$panel-line" }, radius: 9, minHeight: 44 },
-    textField: { text: { color: "$ink" }, background: "$bg-2", border: { width: 1, color: "$panel-line" }, radius: 9, minHeight: 44 },
+    select: { text: { color: "$ink" }, background: "$bg-2", border: { width: 1, color: "$panel-line" }, radius: 9 },
+    textField: { text: { color: "$ink" }, background: "$bg-2", border: { width: 1, color: "$panel-line" }, radius: 9 },
     dialog: {
       background: { type: "linear", stops: ["$panel-2", "$panel"] }, border: { width: 1, color: "$panel-line" }, radius: 14, padding: 20,
       parts: { backdrop: { background: "#0e081ab8" } },

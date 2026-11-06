@@ -769,7 +769,7 @@ function selectRow(id: string, label: string, w: number, cur: number, options: (
   ui.row(`${id}-row`, () => {
     para(label, Math.max(90, w * 0.4), "body");
     ui.spacer();
-    const next = ui.style({ width: Math.min(280, w * 0.55) }).id(id).select(label, cur, options);
+    const next = ui.id(id).select(label, cur, options);
     if (next !== cur) set(next);
   }, { width: w, align: "center", spacing: 10 });
 }
