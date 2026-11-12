@@ -1,3 +1,7 @@
+import { localizedStyle as __l10nStyle } from "./l10n/font.ts";
+import { localizedDrawOptions as __l10nDrawOptions } from "./l10n/font.ts";
+// localization-runtime:attached
+import { openLocalizedOptions as __l10nOptions } from "./l10n/menu.ts";
 // The browser build's DOM shell (index.html + js/ui/ui.js + css/style.css) as
 // starhermit:ui, built every frame: the header (brand and the Boards /
 // Achievements / Help / Settings nav), the title (key art under its scrim, the
@@ -12,7 +16,21 @@
 // (≥ 1024 px: rails beside the board), compact (narrower: drawers), portrait
 // (the thumb tray), short landscape (≤ 560 px tall: the status bar as a side
 // column); the left-handed setting mirrors the drawers and the toasts.
-import { frame, openMenu } from "starhermit:engine";
+// The browser build's DOM shell (index.html + js/ui/ui.js + css/style.css) as
+// starhermit:ui, built every frame: the header (brand and the Boards /
+// Achievements / Help / Settings nav), the title (key art under its scrim, the
+// logo, Play, the Daily / Journey / Profile chips, invite and sign-in), mode
+// select, the Journey map, setup (the per-mode picker and the round's facts
+// and goals), the round (status bar, objective and actions rails — drawers
+// with edge tabs on compact layouts — the thumb tray in portrait, the lesson
+// banner, the Ready… Set… Go! countdown, the text board), the pause and
+// results dialogs, the resume offer and reset confirmations, Settings, Help,
+// Achievements, Boards, Profile, and the toasts and captions. The browser's
+// media queries are layouts picked by the window's logical size: wide
+// (≥ 1024 px: rails beside the board), compact (narrower: drawers), portrait
+// (the thumb tray), short landscape (≤ 560 px tall: the status bar as a side
+// column); the left-handed setting mirrors the drawers and the toasts.
+import { frame } from "starhermit:engine";
 import { bindingLabel, requestRebind } from "starhermit:input";
 import * as draw from "starhermit:draw";
 import * as ui from "starhermit:ui";
@@ -59,9 +77,9 @@ function button(b: Btn, width: number | null = null): void {
   const s: ui.Style = width != null ? { width } : {};
   if (width != null && buttonWidth(b.text, style) > width) {
     const inner = Math.max(20, width - 30);
-    opts.content = () => { ui.style({ text: { align: "center" } }).paragraph(b.text, inner); };
+    opts.content = () => { ui.style(__l10nStyle({ text: { align: "center" } })).paragraph(b.text, inner); };
   }
-  if (ui.style(...style, s).id(b.id).button(b.text, opts)) b.act();
+  if (ui.style(...__l10nStyle(style), __l10nStyle(s)).id(b.id).button(b.text, opts)) b.act();
 }
 /** Buttons at their own widths in rows that wrap at `width` (CSS flex-wrap). */
 function flow(label: string, list: Btn[], width: number, align: "start" | "center" | "end" = "start", gap = 8): void {
@@ -74,14 +92,14 @@ function para(text: string, width: number, cls = "body", id?: string, center = f
   if (!text) return;
   const styles: (string | ui.Style)[] = [cls];
   if (center) styles.push({ text: { align: "center" } });
-  let u = ui.style(...styles);
+  let u = ui.style(...__l10nStyle(styles));
   if (id) u = u.id(id);
   if (ui.measureText(text, { style: styles }).width / pr().scale <= width) u.label(text);
   else u.paragraph(text, width);
 }
 function heading(cls: string, text: string, width: number, id?: string): void {
   if (ui.measureText(text, { kind: "heading", style: [cls] }).width / pr().scale <= width) (id ? ui.id(id) : ui).style(cls).heading(text);
-  else ui.style(cls).paragraph(text, width);
+  else ui.style(__l10nStyle(cls)).paragraph(text, width);
 }
 const ARROWS: Record<string, string> = { "Arrow Left": "←", "Arrow Right": "→", "Arrow Up": "↑", "Arrow Down": "↓", Escape: "Esc", Slash: "?", "/": "?" };
 function kbd(action: string): string { const l = bindingLabel(action, "keyboard"); return ARROWS[l] ?? l; }
@@ -131,7 +149,7 @@ function header(L: Layout): number {
   const navW = navs.reduce((a, [, t]) => a + buttonWidth(t, [navCls]) + 4, 0);
   const oneRow = brandW + navW + 16 <= w;
   const r = ui.place("header", { anchor: "top-start", x: 0, y: 0 }, () => {
-    const brand = (): void => { if (ui.style("nav-btn", "brand").id("brand-home").button("Jewel Cascade")) leaveToTitle(); };
+    const brand = (): void => { if (ui.style(__l10nStyle("nav-btn"), __l10nStyle("brand")).id("brand-home").button("Jewel Cascade")) leaveToTitle(); };
     const nav = (width: number): void => flow("nav", navs.map(([id, text, s]) => ({ id, text, style: [navCls], act: () => openNav(s) })), width, oneRow ? "end" : "center", 4);
     if (oneRow) ui.row("header-row", () => { brand(); ui.spacer(); nav(navW + 8); }, { width: w, align: "center" });
     else ui.column("header-col", () => { brand(); nav(w); }, { width: w, align: "center", spacing: 0 });
@@ -175,9 +193,9 @@ function titleBackdrop(): void {
   draw.box(0, 0, f.width, f.height, hc() ? "title-scrim-hc" : "title-scrim");
 }
 function chip(id: string, title: string, sub: string, w: number, act: () => void): void {
-  if (ui.style("chip", { width: w }).id(id).button(title + ". " + sub, {
+  if (ui.style(__l10nStyle("chip"), __l10nStyle({ width: w })).id(id).button(title + ". " + sub, {
     content: () => ui.column(`${id}-face`, () => {
-      ui.style("chip-title").label(title);
+      ui.style(__l10nStyle("chip-title")).label(title);
       para(sub, w - 30, "chip-sub", `${id}-sub`);
     }, { spacing: 2, align: "start" }),
   })) act();
@@ -186,9 +204,9 @@ function titleScreen(L: Layout, top: number): void {
   page("title", L, top, 900, (w) => {
     ui.column("title-wrap", () => {
       const size = Math.max(41.6, Math.min(72, L.lw * 0.08));
-      ui.style("game-logo", { text: { size } }).id("title-h").heading("Jewel Cascade");
+      ui.style(__l10nStyle("game-logo"), __l10nStyle({ text: { size } })).id("title-h").heading("Jewel Cascade");
       para(T("Swap jewels, chase cascades, finish the goals."), w, "tagline", "tagline", true);
-      if (ui.style("btn-huge").id("btn-play").button(T("Play"))) play();
+      if (ui.style(__l10nStyle("btn-huge")).id("btn-play").button(T("Play"))) play();
       const total = Content.JOURNEY.length;
       const stars = Object.values(progress.journeyStars || {}).reduce((n, s) => n + s, 0);
       const nextStage = Math.min(progress.journeyUnlocked || 1, total);
@@ -234,11 +252,11 @@ function modesScreen(L: Layout, top: number): void {
       for (let i = 0; i < MODES.length; i += cols) {
         ui.row(`mode-r${i}`, () => {
           for (const [id, name, desc, ranked] of MODES.slice(i, i + cols)) {
-            if (ui.style("mode-card", { width: cw, ...(L.phone ? { padding: 12 } : {}) }).id(`mode-${id}`).button(T(name) + ". " + T(desc), {
+            if (ui.style(__l10nStyle("mode-card"), __l10nStyle({ width: cw, ...(L.phone ? { padding: 12 } : {}) })).id(`mode-${id}`).button(T(name) + ". " + T(desc), {
               content: () => ui.column(`mode-${id}-face`, () => {
                 para(T(name), inner, "mode-name");
                 para(T(desc), inner, "mode-desc");
-                ui.style(ranked ? "badge-ranked" : "badge-casual").label(upper(ranked ? T("Ranked") : T("Casual")));
+                ui.style(__l10nStyle(ranked ? "badge-ranked" : "badge-casual")).label(upper(ranked ? T("Ranked") : T("Casual")));
               }, { spacing: L.phone ? 4 : 6, align: "start", width: inner }),
             })) openSetup(id);
           }
@@ -268,11 +286,11 @@ function journeyScreen(L: Layout, top: number): void {
             const n = i + k + 1;
             const got = (progress.journeyStars || {})[c.id] || 0;
             const label = T("Stage {n}", { n }) + (c.mastery ? " " + T("(mastery)") : "") + (got ? ", " + T("{n} stars", { n: got }) : "") + (n > unlocked ? ", " + T("locked") : "");
-            if (ui.style(n === unlocked ? "stage-current" : "stage-btn", { width: cw, height: Math.max(56, Math.min(cw, 84)) }).id(`stage-${n}`).button(label, {
+            if (ui.style(__l10nStyle(n === unlocked ? "stage-current" : "stage-btn"), __l10nStyle({ width: cw, height: Math.max(56, Math.min(cw, 84)) })).id(`stage-${n}`).button(label, {
               disabled: n > unlocked,
               content: () => ui.column(`stage-${n}-face`, () => {
-                ui.style("stage-num").label((c.mastery ? "◆ " : "") + String(n));
-                ui.style("stage-stars").label("★".repeat(got) + "☆".repeat(3 - got));
+                ui.style(__l10nStyle("stage-num")).label((c.mastery ? "◆ " : "") + String(n));
+                ui.style(__l10nStyle("stage-stars")).label("★".repeat(got) + "☆".repeat(3 - got));
               }, { spacing: 2, align: "center" }),
             })) pickJourney(n - 1);
           });
@@ -286,12 +304,12 @@ function journeyScreen(L: Layout, top: number): void {
 // ------------------------------------------------------------------ setup
 function pickerItem(id: string, name: string, mark: string, markCls: string, w: number, selected: boolean, act: () => void, sub?: string): void {
   const inner = w - 30;
-  if (ui.style("picker-item", { width: w }).id(id).button(name + (sub ? ". " + sub : "") + (mark ? ", " + mark : ""), {
+  if (ui.style(__l10nStyle("picker-item"), __l10nStyle({ width: w })).id(id).button(name + (sub ? ". " + sub : "") + (mark ? ", " + mark : ""), {
     selected,
     content: () => ui.column(`${id}-face`, () => {
       ui.row(`${id}-row`, () => {
         para(name, Math.max(60, inner - (mark ? textWidth(mark, markCls) + 12 : 0)), "body");
-        if (mark) { ui.spacer(); ui.style(markCls).label(mark); }
+        if (mark) { ui.spacer(); ui.style(__l10nStyle(markCls)).label(mark); }
       }, { width: inner, align: "center" });
       if (sub) para(sub, inner, "dim-small");
     }, { spacing: 2, width: inner }),
@@ -319,7 +337,7 @@ function setupScreen(L: Layout, top: number): void {
             () => pickContent(Content.practiceContent(d.id, app.practiceSeed)), T(d.desc));
         }
         ui.row("seed-row", () => {
-          ui.style("body").label(T("Seed (optional)"));
+          ui.style(__l10nStyle("body")).label(T("Seed (optional)"));
           app.practiceSeed = ui.textField("practice-seed", app.practiceSeed, { maxChars: 32, width: Math.min(260, w - 160), placeholder: T("random") });
         }, { spacing: 10, align: "center" });
       } else if (mode === "challenge") {
@@ -330,7 +348,7 @@ function setupScreen(L: Layout, top: number): void {
       } else if (mode === "score") {
         const before = app.chaseSeed;
         ui.row("chase-row", () => {
-          ui.style("body").label(T("Seed"));
+          ui.style(__l10nStyle("body")).label(T("Seed"));
           app.chaseSeed = ui.textField("chase-seed", app.chaseSeed, { maxChars: 40, width: Math.min(260, w - 70), placeholder: T("any word or phrase") });
         }, { spacing: 10, align: "center" });
         if (app.chaseSeed !== before && app.chaseSeed.trim()) app.setupChoice = Content.scoreChaseContent(app.chaseSeed);
@@ -358,7 +376,7 @@ function setupSummary(c: Round, w: number): void {
     if (settings.access.timingAssist && c.timeLimitSec) assists.push(T("timing assist ×1.5"));
     const ranked = c.ranked ? (platform.signedIn() ? T("Ranked (personal bests)") : T("Ranked (recorded locally)")) : T("Casual");
     facts("setup-facts", [[T("Rules"), rulesLine], [T("Expected duration"), duration], [T("Players"), "1"], [T("Assists"), assists.join(", ")], [T("Ranked?"), ranked]], w);
-    ui.style("h4").label(T("Goals"));
+    ui.style(__l10nStyle("h4")).label(T("Goals"));
     if (c.kind === "lesson") para(T("Finish every guided step."), w, "body");
     else goalList("setup-goals", c.goals.map((g) => ({ ...g, left: g.n, done: false })) as Goal[], w, false);
   }, { spacing: 6, width: w });
@@ -376,14 +394,14 @@ function swatch(id: string, g: { type: string; color?: number }): void {
   if (g.type === "collect") { bg = pal[g.color ?? 0] ?? "#ffffff"; fg = g.color === 5 ? "#f4ecdf" : g.color === 6 ? "#2a2440" : "#14101f"; glyph = "RATESMO"[g.color ?? 0] ?? "?"; }
   else if (g.type === "ice") { bg = "#9fd8ef"; fg = "#14303c"; glyph = "❄"; }
   else if (g.type === "score") { return; }
-  ui.style({ background: bg, radius: 7, width: 24, height: 24, border: { width: 1, color: "#00000059" }, padding: 0, text: { color: fg, size: 12.8, weight: "800", align: "center" } }).id(id).label(glyph);
+  ui.style(__l10nStyle({ background: bg, radius: 7, width: 24, height: 24, border: { width: 1, color: "#00000059" }, padding: 0, text: { color: fg, size: 12.8, weight: "800", align: "center" } })).id(id).label(glyph);
 }
 function goalList(id: string, goals: Goal[], w: number, live: boolean): void {
   ui.column(id, () => goals.forEach((g, i) => ui.row(`${id}-${i}`, () => {
     swatch(`${id}-${i}-sw`, g);
     const text = goalText(g) + (live ? " — " + goalLeftText(g) : "");
     para(text, w - 60, g.done ? "goal-done-text" : "goal-text", `${id}-${i}-t`);
-    if (g.done) ui.style("goal-check").label("✓");
+    if (g.done) ui.style(__l10nStyle("goal-check")).label("✓");
   }, { spacing: 8, align: "center" })), { spacing: 6, width: w });
 }
 
@@ -396,9 +414,9 @@ function statusBar(L: Layout, vertical: boolean): ui.Rect {
   const stateText = T(app.hudState);
   const build = (): void => {
     for (const [id, k, v, warn] of items) {
-      ui.row(`hud-${id}`, () => { ui.style("hud-label").label(upper(k)); ui.style(warn ? "hud-warn" : "hud-value").id(`hud-${id}-v`).label(v); }, { spacing: 6, align: "center" });
+      ui.row(`hud-${id}`, () => { ui.style(__l10nStyle("hud-label")).label(upper(k)); ui.style(__l10nStyle(warn ? "hud-warn" : "hud-value")).id(`hud-${id}-v`).label(v); }, { spacing: 6, align: "center" });
     }
-    ui.style("hud-state").id("hud-state").label(stateText);
+    ui.style(__l10nStyle("hud-state")).id("hud-state").label(stateText);
   };
   // Short landscape: a side column under the drawer tab, its readouts centred down it.
   if (vertical) return ui.place("hud-status", { anchor: "top-start", x: 8, y: 60 }, () => ui.column("hud-col", build, { style: "hud-status", width: 152, height: Math.max(120, L.lh - 68), spacing: 5, align: "start", justify: "center" }));
@@ -419,9 +437,9 @@ function objectiveRail(w: number): void {
   if (assists.length) para(assists.join(" · "), w, "hint-line", "assists-line");
 }
 function kbdButton(id: string, text: string, key: string, w: number, disabled: boolean, act: () => void): void {
-  if (ui.style("btn", { width: w }).id(id).button(text, {
+  if (ui.style(__l10nStyle("btn"), __l10nStyle({ width: w })).id(id).button(text, {
     disabled,
-    content: () => ui.row(`${id}-face`, () => { ui.style("body").label(text); if (key) ui.style("kbd").label(key); }, { spacing: 8, align: "center" }),
+    content: () => ui.row(`${id}-face`, () => { ui.style(__l10nStyle("body")).label(text); if (key) ui.style(__l10nStyle("kbd")).label(key); }, { spacing: 8, align: "center" }),
   })) { ui.setFocus(null); act(); }
 }
 function actionsRail(w: number): void {
@@ -485,7 +503,7 @@ function gameScreen(L: Layout): void {
   const pw = Math.max(80, x1 - x0), ph = Math.max(80, y1 - y0);
   render.setPlayfield((L.ox + x0) * sc, (L.oy + y0) * sc, pw * sc, ph * sc, f.width, f.height);
   if (app.mirror) mirrorPanel(L, trayH);
-  if (app.countdown) ui.place("countdown", "center", () => ui.style("ready").id("ready-text").label(T(app.countdown!)));
+  if (app.countdown) ui.place("countdown", "center", () => ui.style(__l10nStyle("ready")).id("ready-text").label(T(app.countdown!)));
   void lastHudW;
 }
 function thumbTray(L: Layout): number {
@@ -510,7 +528,7 @@ function drawers(L: Layout, statusBottom: number, trayH: number, left: boolean):
   for (const [which, text, atStart] of tabs) {
     const bw = buttonWidth(text, ["drawer-tab"]);
     ui.place(`tab-${which}`, { anchor: "top-start", x: atStart ? 0 : L.lw - bw, y: tabY }, () => {
-      if (ui.style("drawer-tab", { width: bw }).id(`tab-${which}`).button(text, { selected: app.drawer === which })) toggleDrawer(which);
+      if (ui.style(__l10nStyle("drawer-tab"), __l10nStyle({ width: bw })).id(`tab-${which}`).button(text, { selected: app.drawer === which })) toggleDrawer(which);
     });
   }
   if (!app.drawer) return;
@@ -535,9 +553,9 @@ function banner(L: Layout, trayH: number): { w: number; h: number; bottom: numbe
     ui.column("banner-col", () => {
       para(T(b.text), w - 34, "tutorial-text", "tutorial-text");
       ui.row("banner-meta", () => {
-        if (b.meta) ui.style("tutorial-meta").id("tutorial-step").label(b.meta);
+        if (b.meta) ui.style(__l10nStyle("tutorial-meta")).id("tutorial-step").label(b.meta);
         ui.spacer();
-        if (ui.style("btn-small").id("btn-banner").button(T(b.button))) bannerButton();
+        if (ui.style(__l10nStyle("btn-small")).id("btn-banner").button(T(b.button))) bannerButton();
       }, { width: w - 34, align: "center" });
     }, { style: "tutorial-banner", width: w, spacing: 6 });
   });
@@ -557,9 +575,9 @@ function mirrorPanel(L: Layout, trayH: number): void {
       const iw = inner - (scroll ? 12 : 0);
       const r = ui.column("mirror-body", () => {
         ui.row("mirror-head", () => {
-          ui.style("h3").label(T("Text board"));
+          ui.style(__l10nStyle("h3")).label(T("Text board"));
           ui.spacer();
-          if (ui.style("btn-small").id("mirror-close").button(T("Close"))) toggleMirror();
+          if (ui.style(__l10nStyle("btn-small")).id("mirror-close").button(T("Close"))) toggleMirror();
         }, { width: iw, align: "center" });
         const legal = s.phase === "ready" ? Rules.legalActions(s).length : 0;
         para(T("Score {n}", { n: fmtInt(s.score) }) + " · " + (s.movesLeft > 100 ? T("unlimited moves") : T("{n} moves left", { n: s.movesLeft })) + " · " + T("{n} legal swaps.", { n: legal }), iw, "dim", "mirror-summary");
@@ -602,9 +620,9 @@ function mirrorGrid(w: number): void {
           }
           const label = cellLabel(i);
           const fontSize = Math.max(9.6, Math.min(16, size * 0.4));
-          if (ui.style("mirror-cell", { width: size, height: size, background: bg, border, text: { color: fg, size: fontSize } }).id(`cell-${i}`).button(label, {
+          if (ui.style(__l10nStyle("mirror-cell"), __l10nStyle({ width: size, height: size, background: bg, border, text: { color: fg, size: fontSize } })).id(`cell-${i}`).button(label, {
             selected: i === app.mirrorSel,
-            content: () => ui.style({ text: { color: fg, size: fontSize, weight: "800", align: "center" } }).label(glyph || " "),
+            content: () => ui.style(__l10nStyle({ text: { color: fg, size: fontSize, weight: "800", align: "center" } })).label(glyph || " "),
           })) mirrorTap(i);
         }
       }, { spacing: gap });
@@ -662,8 +680,8 @@ const COSMETIC_TYPES: Record<string, string> = { theme: N("theme"), trail: N("tr
 function cosmeticName(id: string): string { return COSMETIC_NAMES[id] ? T(COSMETIC_NAMES[id]!) : id; }
 function pills(id: string, list: string[], w: number): void {
   ui.row(id, () => list.forEach((t, k) => {
-    if (textWidth(t, "ach-pill") > w) ui.style("ach-pill").id(`${id}-${k}`).paragraph(t, w - 28);
-    else ui.style("ach-pill").id(`${id}-${k}`).label(t);
+    if (textWidth(t, "ach-pill") > w) ui.style(__l10nStyle("ach-pill")).id(`${id}-${k}`).paragraph(t, w - 28);
+    else ui.style(__l10nStyle("ach-pill")).id(`${id}-${k}`).label(t);
   }), { wrap: true, width: w, gap: 8 });
 }
 function xpBar(id: string, pct: number, w: number): void {
@@ -686,36 +704,36 @@ function resultsDialog(L: Layout): void {
   const showPlate = !hc() && L.lh >= 620;
   dialogFrame(T("Results"), L, 544, (w) => {
     heading("h2", T(REASON_HEADLINES[r.reason] ?? N("Round over")), w, "res-h");
-    ui.style("res-stars").id("res-stars").label(starsText(r.stars));
+    ui.style(__l10nStyle("res-stars")).id("res-stars").label(starsText(r.stars));
     ui.row("res-score-row", () => {
-      ui.style("res-score").label(T("Score"));
-      ui.style("res-score", { text: { weight: "700" } }).id("res-score").label(fmtInt(r.score));
-      if (r.ranked) ui.style("badge-ranked").label(upper(T("Ranked")));
+      ui.style(__l10nStyle("res-score")).label(T("Score"));
+      ui.style(__l10nStyle("res-score"), __l10nStyle({ text: { weight: "700" } })).id("res-score").label(fmtInt(r.score));
+      if (r.ranked) ui.style(__l10nStyle("badge-ranked")).label(upper(T("Ranked")));
     }, { spacing: 8, align: "center" });
     const lb = leaderboardLine();
     if (lb) para(lb, w, "dim", "res-lb");
-    ui.style("h3").label(T("Score breakdown"));
+    ui.style(__l10nStyle("h3")).label(T("Score breakdown"));
     ui.column("res-breakdown", () => {
-      ui.row("bd-head", () => { ui.style("cell-th").label(T("Component")); ui.spacer(); ui.style("cell-th").label(T("Points")); }, { style: "table-row", width: w, align: "center" });
+      ui.row("bd-head", () => { ui.style(__l10nStyle("cell-th")).label(T("Component")); ui.spacer(); ui.style(__l10nStyle("cell-th")).label(T("Points")); }, { style: "table-row", width: w, align: "center" });
       const rows = COMPONENTS.filter(([k]) => (r.components[k] || 0) > 0);
-      if (!rows.length) ui.row("bd-none", () => ui.style("cell-td").label(T("No points scored")), { style: "table-row", width: w });
+      if (!rows.length) ui.row("bd-none", () => ui.style(__l10nStyle("cell-td")).label(T("No points scored")), { style: "table-row", width: w });
       rows.forEach(([k, label]) => ui.row(`bd-${k}`, () => {
         para(T(label), w - 110, "cell-th");
         ui.spacer();
-        ui.style("cell-td").label(fmtInt(r.components[k] || 0));
+        ui.style(__l10nStyle("cell-td")).label(fmtInt(r.components[k] || 0));
       }, { style: "table-row", width: w, align: "center" }));
-      ui.row("bd-total", () => { ui.style("cell-total").label(T("Total")); ui.spacer(); ui.style("cell-total").id("res-total").label(fmtInt(r.score)); }, { style: "table-foot", width: w, align: "center" });
+      ui.row("bd-total", () => { ui.style(__l10nStyle("cell-total")).label(T("Total")); ui.spacer(); ui.style(__l10nStyle("cell-total")).id("res-total").label(fmtInt(r.score)); }, { style: "table-foot", width: w, align: "center" });
     }, { spacing: 0, width: w });
-    ui.style("h3").label(T("Goals"));
+    ui.style(__l10nStyle("h3")).label(T("Goals"));
     goalList("res-goals", r.goals, w, true);
     const newAch = r.progression?.newAchievements ?? [];
     if (newAch.length) {
-      ui.style("h3").label(T("Achievements unlocked"));
+      ui.style(__l10nStyle("h3")).label(T("Achievements unlocked"));
       pills("res-ach", newAch.map((key) => { const d = Ach.ACHIEVEMENTS.find((a) => a.key === key); return d ? T(d.name) : key; }), w);
     }
     const m = r.progression?.mastery;
     if (m) {
-      ui.style("h3").label(T("Mastery"));
+      ui.style(__l10nStyle("h3")).label(T("Mastery"));
       const after = masteryProgress(m.total);
       xpBar("res-xp", after.pct, w);
       para(T("+{xp} XP · level {level}", { xp: m.gained, level: m.levelAfter }) + (m.levelAfter > m.levelBefore ? " — " + T("level up!") : " · " + T("{n} XP to next", { n: after.toNext })), w, "dim", "res-mastery");
@@ -758,7 +776,7 @@ function modals(L: Layout): void {
 
 // ------------------------------------------------------------------ settings
 function group(id: string, title: string, w: number, build: (w: number) => void): void {
-  ui.column(id, () => { ui.style("h3").label(title); build(w); }, { style: "set-group", width: w, spacing: 8 });
+  ui.column(id, () => { ui.style(__l10nStyle("h3")).label(title); build(w); }, { style: "set-group", width: w, spacing: 8 });
 }
 function check(id: string, label: string, cur: boolean, set: (v: boolean) => void): void {
   const next = ui.id(id).checkbox(label, cur);
@@ -779,7 +797,7 @@ function settingsScreen(L: Layout, top: number): void {
     heading("h2", T("Settings"), w, "set-h");
     group("set-audio", T("Audio"), w, (iw) => {
       para(T("Volumes for music, effects and the interface, the voice limit and mute are in the StarHermit Options."), iw, "dim");
-      flow("audio-opts", [{ id: "btn-options", text: T("Open Options"), act: () => openMenu() }], iw);
+      flow("audio-opts", [{ id: "btn-options", text: T("Open Options"), act: () => __l10nOptions() }], iw);
       check("set-muted", T("Mute game sounds"), !!settings.audio.muted, (v) => { settings.audio.muted = v; });
       check("set-captions", T("Captions for audio cues"), !!settings.access.captions, (v) => { settings.access.captions = v; });
     });
@@ -865,7 +883,7 @@ function achievementsScreen(L: Layout, top: number): void {
       for (const a of Ach.ACHIEVEMENTS) {
         const got = progress.achievements && progress.achievements[a.key];
         ui.row(`ach-${a.key}`, () => {
-          ui.style("ach-icon").label(got ? "★" : "☆");
+          ui.style(__l10nStyle("ach-icon")).label(got ? "★" : "☆");
           ui.column(`ach-${a.key}-t`, () => {
             para(T(a.name), w - 80, "h4");
             para(T(a.desc) + (got ? " " + T("Unlocked {date}.", { date: String(got.at).slice(0, 10) }) : ""), w - 80, "dim");
@@ -936,15 +954,15 @@ function profileScreen(L: Layout, top: number): void {
           const P = ink(hc());
           draw.box(r.x, r.y, r.width, r.height, { background: { type: "linear", angle: 160, stops: [P.accent2, P.accent] }, radius: 999 });
           if (av) draw.image(av, r.x, r.y, r.width, r.height);
-          else draw.text(playerName().slice(0, 1).toUpperCase(), r.x + r.width / 2, r.y + r.height / 2 - 14 * s.scale, { size: 24 * s.scale, color: "#2a1a08", weight: "800", align: "center" });
+          else draw.text(playerName().slice(0, 1).toUpperCase(), r.x + r.width / 2, r.y + r.height / 2 - 14 * s.scale, __l10nDrawOptions({ size: 24 * s.scale, color: "#2a1a08", weight: "800", align: "center" }));
         },
       });
       ui.column("prof-names", () => {
-        ui.style("profile-name").id("prof-name").label(playerName());
-        ui.style("dim").id("prof-title").label(cosmeticName(settings.cosmetics.title));
+        ui.style(__l10nStyle("profile-name")).id("prof-name").label(playerName());
+        ui.style(__l10nStyle("dim")).id("prof-title").label(cosmeticName(settings.cosmetics.title));
       }, { spacing: 2 });
     }, { spacing: 16, align: "center" });
-    ui.style("h3").label(T("Mastery"));
+    ui.style(__l10nStyle("h3")).label(T("Mastery"));
     const xp = progress.masteryXp || 0;
     const level = Ach.masteryLevelForXp(xp);
     const mp = masteryProgress(xp);
@@ -955,13 +973,13 @@ function profileScreen(L: Layout, top: number): void {
       const labels: Record<string, string> = { syncing: N("cloud: saving…"), saving: N("cloud: saving…"), synced: N("cloud: synced"), offline: N("cloud: offline"), local: "" };
       if (labels[sync]) para(T(labels[sync]!), w, "dim", "prof-sync");
     }
-    ui.style("h3").label(T("Career"));
+    ui.style(__l10nStyle("h3")).label(T("Career"));
     const c = progress.career;
     facts("prof-stats", [
       [T("Rounds completed"), String(c.roundsCompleted || 0)], [T("Rounds won"), String(c.roundsWon || 0)], [T("Current win streak"), String(c.winStreak || 0)],
       [T("Best win streak"), String(c.bestWinStreak || 0)], [T("Total score"), fmtInt(c.totalScore || 0)], [T("Daily streak"), String((progress.daily && progress.daily.streak) || 0)],
     ], w);
-    ui.style("h3").label(T("Cosmetics"));
+    ui.style(__l10nStyle("h3")).label(T("Cosmetics"));
     for (const [label, bucket, all, kind] of COSMETIC_BUCKETS) {
       const unlocked = (progress.cosmeticsUnlocked && progress.cosmeticsUnlocked[bucket]) || [];
       const cur = Math.max(0, all.indexOf(settings.cosmetics[kind]));
