@@ -1,5 +1,7 @@
 # Jewel Cascade
 
+**[▶ Play Jewel Cascade on StarHermit](https://dashboard.starhermit.com/play/77396569-6059-49de-af39-70ea6871e049)**
+
 A deterministic match-3 puzzle game set in a jewel workshop suspended in warm
 twilight. Swap adjacent jewels to form lines of three or more, create rays,
 blooms, and prisms, and complete limited-move goals across six modes.
