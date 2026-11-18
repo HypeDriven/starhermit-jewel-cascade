@@ -16,7 +16,7 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | Players | 1, with asynchronous ranked comparison |
 | Session | 90 s – 4 min per round; a Journey act is ~20 min |
 | Platforms | The StarHermit client (native) and browsers (the engine's web runtime); desktop and phones, portrait and landscape |
-| Engine | StarHermit engine script game, pinned to engine **1.39.0** (host API 1.39, `engine.minor=39`) |
+| Engine | StarHermit engine script game, pinned to engine **1.44.1** (host API 1.44, `engine.minor=44`) |
 | Rendering | `starhermit:scene` tabletop scene, `starhermit:ui` menus and HUD, with a complete text board as an equal play path |
 | Entry point | `native/main.ts` (`engine.entry`); browsers open the loader `index.html` (`launch`) |
 
@@ -641,3 +641,9 @@ the drawer, pause and resume, failing on console errors or warnings or the error
 The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-SG`, `en-HK`, `en-BQ`, `es-CO`, `de-IT`, `fr-IT`, `es-CL`, `es-AR`, `es-EC`, `de-BR`. These reuse the corresponding existing translations in their language family. The runtime can resolve the exact regional tag. Language selection is available from the game’s Options panel or F2 and is saved per player in `ui.language`. Changes apply during play. Additional national, regional and indigenous language packs are only shipped once every English message has a translation with intact placeholders and markup. Complete additional language tables: `ja-JP`, `nl-BE`, `zh-SG`, `ms-SG`, `zh-HK`, `yue-HK`, `nl-NL`, `fi-FI`, `sv-FI`, `et-EE`, `id-ID`, `vi-VN`, `ta-SG`, `ru-FI`, `ru-EE`, `da-DE`, `lb-BE`, `co-FR`, `eu-FR`, `ca-FR`, `oc-FR`, `sl-IT`, `fur-IT`, `ca-IT`, `oc-IT`, `ca-ES`, `eu-ES`, `gl-ES`, `su-ID`, `bew-ID`, `km-VN`.
 
 <!-- regional-localization:end -->
+
+## Engine 1.44.1
+
+Browser play uses the WebGPU-only StarHermit 1.44.1 web runtime. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+
+The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
