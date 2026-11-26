@@ -12,7 +12,7 @@
     "metadataSource": "starhermit.txt",
     "createdAt": "2026-08-17T16:43:03.089538+00:00",
     "coverArtSource": "manifest",
-    "coverArtUpdatedAt": "2026-11-26T16:04:13.260768+00:00",
+    "coverArtUpdatedAt": "2026-11-26T20:50:50.556902+00:00",
     "submittedByUserId": "2712e04e-461b-4d23-81ae-e40b429128a8",
     "submittedByUsername": "starhermit",
     "hosting": {
@@ -22,9 +22,9 @@
       "pinnedCommitSha": null,
       "deployedCommitSha": null,
       "deployError": null,
-      "deployedAt": "2026-11-26T16:04:11.980744+00:00",
+      "deployedAt": "2026-11-26T20:50:50.544136+00:00",
       "externalLaunchUrl": null,
-      "engineVersion": "1.50.0",
+      "engineVersion": "1.51.0",
       "deployWarning": null
     },
     "description": "Swap adjacent jewels, create powerful matches, and fulfill gem orders before your moves run out.",
@@ -36,19 +36,19 @@
     "links": [],
     "isDisabled": false
   },
-  "publishedAt": "2026-11-26T16:04:42.707Z",
-  "sourceCommit": "9c6e2d2f53bbb9ac1c510465d8643325e7da9f5d",
-  "bytesReceived": 3898094,
-  "archiveSha256": "89fccce6624e2281d4719c8118b7cd363da228a392dfdf856d4cc61a8d7a2ff6",
+  "publishedAt": "2026-11-26T20:50:50.773Z",
+  "sourceCommit": "35b42b9d8d0a98459cad649cb39b9ef79d9adfba",
+  "bytesReceived": 3898110,
+  "archiveSha256": "d3e0bed9768a9c787ac36d1327f6f5861836f058c5e285e9cf80fb9dde0deac3",
   "indexSha256": "18ac3b3dd4343a4a1f16fe027643273a94153182c1b972364f2f4bfba27308fe",
   "result": {
     "clientPublished": true,
     "serverImageLoaded": false,
     "imageDigest": null,
-    "bytesReceived": 3898094,
+    "bytesReceived": 3898110,
     "mode": "replace",
     "filesRemoved": 0,
-    "engineVersion": "1.50.0",
+    "engineVersion": "1.51.0",
     "deployWarning": null
   },
   "liveVerification": {
