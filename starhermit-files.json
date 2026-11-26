@@ -43,7 +43,7 @@
     "native/render.ts": {"sha256": "1d48108d6811ad44e507c1d8691f91ce6ec081eabae34cf948a5568b65c7b195", "size": 65452},
     "native/screens.ts": {"sha256": "82fbc56b886aa7be34411fe77471e3291977b8e920a830c13cc758a2ea0cd262", "size": 62872},
     "native/style.ts": {"sha256": "6f57b7f9187a855aec5162bbf8b4e177b75195c1bbeb1c2464019dd9e31de87f", "size": 3920},
-    "publication.json": {"sha256": "2b8435294c71a3eff5d85477c35ea6e2a7df2e0619a32b87e6c2805578386560", "size": 4132},
+    "publication.json": {"sha256": "ac9f9bf44c45b0f355cfc924b670393b5ed09705cecc9e40e0f19beee50103c8", "size": 4132},
     "score-script.js": {"sha256": "762eda4323fbe38bb29abf1117ec1d637253e288024f9aa8fcb5735b81ef2902", "size": 2488},
     "sfx/bloom-burst.opus": {"sha256": "b9c21bf0a8a81b5a7979ed3a9dbfc3499a34d1dfed83260c740bf0e7beb1ae9f", "size": 24774},
     "sfx/board-shuffle.opus": {"sha256": "e544b5958d10b3151283662850759bee03f00878528a82bc488c82f0e9e82a4f", "size": 55532},
