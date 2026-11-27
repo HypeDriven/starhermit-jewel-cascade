@@ -16,7 +16,7 @@ order before the moves run out, and forge rays, blooms and prisms out of the run
 | Players | 1, with asynchronous ranked comparison |
 | Session | 90 s – 4 min per round; a Journey act is ~20 min |
 | Platforms | The StarHermit client (native) and browsers (the engine's web runtime); desktop and phones, portrait and landscape |
-| Engine | StarHermit engine script game, pinned to engine **1.51.0** (host API 1.51, `engine.minor=51`) |
+| Engine | StarHermit engine script game, pinned to engine **1.53.0** (host API 1.53, `engine.minor=53`) |
 | Rendering | `starhermit:scene` tabletop scene, `starhermit:ui` menus and HUD, with a complete text board as an equal play path |
 | Entry point | `native/main.ts` (`engine.entry`); browsers open the loader `index.html` (`launch`) |
 
@@ -642,12 +642,14 @@ The string tables include complete regional variants for `fr-BE`, `de-BE`, `en-S
 
 <!-- regional-localization:end -->
 
-## Engine 1.51.0
+## Engine 1.53.0
 
-Browser play uses the StarHermit 1.51.0 web runtime on WebGPU, or WebGL 2 where WebGPU is missing. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
+Browser play uses the StarHermit 1.53.0 web runtime on WebGPU, or WebGL 2 where WebGPU is missing. Automatic ray-traced shadows are enabled on supported Vulkan devices, with mapped-shadow fallbacks elsewhere. Packaging creates block-compressed runtime textures and compressed glTF copies, retaining original image fallbacks.
 
 The help screen replays through retained native UI while its contents, options, layout and key bindings are unchanged.
 
 Browser rendering uses the engine's asynchronous pipeline creation so newly encountered materials do not stall the page. Native play retains the engine's synchronous pipeline behavior.
 
 Higher graphics tiers use native per-object motion blur for moving pieces and effects. Camera motion stays sharp, lower tiers omit the effect, and the runtime's Motion blur and Reduce motion preferences remain authoritative.
+
+On engine 1.53.0, browser play through WebGL 2 compiles a frame's shader programs together and holds that frame until they are linked, blends skinned meshes in one pass, reuses the window pass's depth, and uses a hardware WebGL 2 context when WebGPU's adapter is software.
